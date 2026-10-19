@@ -27,6 +27,7 @@ if ($ticker === '') { header('Location: ' . url('home')); exit; }
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
         <a class="btn" href="index.php?r=compare&market=<?= h($market) ?>&tickers=<?= h($ticker) ?>">Сравнить с другими</a>
         <a class="btn" href="index.php?r=export-verify&market=<?= h($market) ?>&ticker=<?= h($ticker) ?>">Скачать CSV</a>
+        <button type="button" id="btn-export-png" class="btn">Скачать PNG</button>
     </div>
 </div>
 
@@ -416,6 +417,48 @@ function renderVerification(lines) {
     }
     box.innerHTML = html;
 }
+
+// ==========================================
+// ЭКСПОРТ ГРАФИКОВ В PNG
+// ==========================================
+document.getElementById('btn-export-png').addEventListener('click', function () {
+    try {
+        // 1. Получаем снимки обоих графиков (Lightweight Charts создает canvas)
+        const mainCanvas = chart.takeScreenshot();
+        const lowerCanvas = rsiChart.takeScreenshot();
+
+        // 2. Создаем невидимый canvas для склейки
+        const outCanvas = document.createElement('canvas');
+        const ctx = outCanvas.getContext('2d');
+
+        // Отступ между графиками
+        const gap = 10;
+
+        // Задаем размеры итогового изображения
+        outCanvas.width = Math.max(mainCanvas.width, lowerCanvas.width);
+        outCanvas.height = mainCanvas.height + lowerCanvas.height + gap;
+
+        // 3. Заливаем фон (темный, как у графиков)
+        ctx.fillStyle = '#131722';
+        ctx.fillRect(0, 0, outCanvas.width, outCanvas.height);
+
+        // 4. Рисуем верхний и нижний график на общем холсте
+        ctx.drawImage(mainCanvas, 0, 0);
+        ctx.drawImage(lowerCanvas, 0, mainCanvas.height + gap);
+
+        // 5. Скачиваем итоговую картинку
+        const link = document.createElement('a');
+        // Формируем красивое имя файла: chart_MOEX_SBER_2026-10-19.png
+        const today = new Date().toISOString().slice(0, 10);
+        link.download = `chart_${MARKET.toUpperCase()}_${TICKER}_${today}.png`;
+        link.href = outCanvas.toDataURL('image/png');
+        link.click();
+        
+    } catch (e) {
+        console.error('Ошибка при экспорте PNG:', e);
+        alert('Не удалось сохранить график как изображение.');
+    }
+});
 
 document.getElementById('period').addEventListener('change', loadAll);
 document.getElementById('granularity').addEventListener('change', loadAll);
