@@ -89,6 +89,7 @@ $skipped = (int)db()->query(
     <a class="logo" href="index.php">📈 StockForecast</a>
     <nav>
         <a href="index.php">Главная</a>
+        <a href="index.php?r=screener">Screener</a>
         <a href="index.php?r=accuracy">Точность</a>
         <a href="index.php?r=compare">Сравнить</a>
         <a href="<?= is_admin() ? url('admin') : url('admin-login') ?>">Админка</a>

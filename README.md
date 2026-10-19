@@ -4,8 +4,8 @@
 
 Три независимые линии прогноза на каждый тикер, автоматическая верификация
 с фактической историей цен (до 20 лет), расчёт точности (MAPE, hit-rate),
-сравнение тикеров, экспорт CSV и PNG, RSI, MACD, Bollinger Bands, скользящие средние (SMA/EMA),
-фоновые задачи (Cron) и Telegram-уведомления.
+screener, сравнение тикеров, экспорт CSV и PNG, RSI, MACD, Bollinger Bands,
+скользящие средние (SMA/EMA), фоновые задачи (Cron) и Telegram-уведомления.
 
 ---
 
@@ -25,7 +25,7 @@ cd StockForecast
 
 # 2. Настроить БД
 cp config.example.php config.php
-# отредактировать config.php
+# отредактировать config.php (DB_HOST, DB_NAME, DB_USER, DB_PASS)
 
 # 3. Создать папку для кэша
 mkdir -p data
