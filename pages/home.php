@@ -1,6 +1,7 @@
 <?php
 $market = $_GET['market'] ?? 'moex';
 $q = trim($_GET['q'] ?? '');
+
 $stocks = ($market === 'moex') ? moex_shares() : us_stocks_list();
 if ($q !== '') {
     $ql = tolower($q);
@@ -10,6 +11,7 @@ if ($q !== '') {
     });
 }
 $flash = get_flash();
+
 $forecastCount = 0; $stockMapCount = 0;
 try {
     $pdo = db();
@@ -33,6 +35,7 @@ try {
         <a href="#features">Возможности</a>
         <a href="#how">Как это работает</a>
         <a href="#stocks">Акции</a>
+        <a href="index.php?r=screener">Screener</a>
         <a href="index.php?r=accuracy">Точность</a>
         <a href="index.php?r=compare">Сравнить</a>
         <a href="<?= is_admin() ? url('admin') : url('admin-login') ?>">
@@ -40,6 +43,7 @@ try {
         </a>
     </nav>
 </header>
+
 <main>
 <?php if ($flash): ?><div class="flash"><?= h($flash) ?></div><?php endif; ?>
 
@@ -116,7 +120,7 @@ try {
         <article class="card feature-card"><div class="card-icon">03</div><h3>MOEX + US</h3><p>Официальный ISS API Мосбиржи и Yahoo Finance (со Stooq-фолбэком) — без ключей.</p></article>
         <article class="card feature-card"><div class="card-icon">04</div><h3>Фиксация истории</h3><p>Котировки кэшируются в <code>history_bars</code> — верификация не зависит от источника.</p></article>
         <article class="card feature-card"><div class="card-icon">05</div><h3>Верификация</h3><p>Сравнение прогноза с фактом: отклонение в %, статус «сбылся / частично / не сбылся».</p></article>
-        <article class="card feature-card"><div class="card-icon">06</div><h3>Метрики точности</h3><p>MAPE и hit-rate по тикеру, бирже и линии. Экспорт в CSV. Сравнение нескольких тикеров.</p></article>
+        <article class="card feature-card"><div class="card-icon">06</div><h3>Метрики точности</h3><p>MAPE и hit-rate по тикеру, бирже и линии. Экспорт в CSV и PNG. Сравнение нескольких тикеров.</p></article>
     </div>
 </section>
 
@@ -128,8 +132,8 @@ try {
     <ol class="steps">
         <li><h3>Загрузите справочник</h3><p>CSV <code>cap_stock.csv</code> из Yii строит маппинг <code>StockId → тикер</code>.</p></li>
         <li><h3>Загрузите прогнозы</h3><p>CSV раскладывается по тикерам на 1–3 линии.</p></li>
-        <li><h3>Откройте график</h3><p>Цена + линии прогноза, RSI, детализация день/неделя/месяц.</p></li>
-        <li><h3>Смотрите верификацию</h3><p>По каждой точке — прогноз, факт, отклонение и статус. CSV на экспорт.</p></li>
+        <li><h3>Откройте график</h3><p>Цена + линии прогноза, RSI, MACD, Bollinger, детализация день/неделя/месяц.</p></li>
+        <li><h3>Смотрите верификацию</h3><p>По каждой точке — прогноз, факт, отклонение и статус. CSV и PNG на экспорт.</p></li>
     </ol>
 </section>
 
@@ -167,6 +171,7 @@ try {
 </main>
 <footer>
     © StockForecast ·
+    <a href="index.php?r=screener" style="color:#26a69a;text-decoration:none">Screener</a> ·
     <a href="index.php?r=accuracy" style="color:#26a69a;text-decoration:none">Точность</a> ·
     <a href="index.php?r=compare" style="color:#26a69a;text-decoration:none">Сравнить</a> ·
     <a href="<?= is_admin() ? url('admin') : url('admin-login') ?>" style="color:#26a69a;text-decoration:none">Админка</a>

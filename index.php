@@ -10,6 +10,7 @@ require_once is_file(__DIR__ . '/lib/import.php')
     : __DIR__ . '/import.php';
 require_once __DIR__ . '/lib/verify.php';
 require_once __DIR__ . '/lib/indicators.php';
+require_once __DIR__ . '/lib/screener.php';
 
 $route = $_GET['r'] ?? 'home';
 
@@ -375,8 +376,42 @@ switch ($route) {
         fclose($out);
         exit;
 
+    case 'export-screener':
+        $days   = max(7, min(365, (int)($_GET['days'] ?? 30)));
+        $market = in_array($_GET['market'] ?? '', ['moex','us'], true) ? $_GET['market'] : '';
+        $sort   = in_array($_GET['sort'] ?? '', ['mape','hit','count','ticker'], true) ? $_GET['sort'] : 'mape';
+
+        $results = screener_data($days, $market);
+        usort($results, function ($a, $b) use ($sort) {
+            switch ($sort) {
+                case 'hit':    return $b['hit_rate'] <=> $a['hit_rate'];
+                case 'count':  return $b['count']    <=> $a['count'];
+                case 'ticker': return strcmp($a['market'] . ':' . $a['ticker'], $b['market'] . ':' . $b['ticker']);
+                default:       return $a['mape'] <=> $b['mape'];
+            }
+        });
+
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="screener_' . date('Y-m-d') . '_' . $days . 'd.csv"');
+        echo "\xEF\xBB\xBF";
+        $out = fopen('php://output', 'w');
+        fputcsv($out, ['Биржа','Тикер','MAPE %','Hit-rate %','Точек','Лучшая линия'], ';');
+        foreach ($results as $r) {
+            fputcsv($out, [
+                $r['market'], $r['ticker'], $r['mape'],
+                round($r['hit_rate'] * 100, 2),
+                $r['count'], $r['best_line'],
+            ], ';');
+        }
+        fclose($out);
+        exit;
+
     case 'accuracy':
         include __DIR__ . '/pages/accuracy.php';
+        break;
+
+    case 'screener':
+        include __DIR__ . '/pages/screener.php';
         break;
 
     case 'compare':
