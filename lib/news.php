@@ -1,6 +1,6 @@
 <?php
 /**
- * Финансовые новости из FreeNewsApi.ai (поиск по тикеру).
+ * Финансовые новости из FreeNewsApi.ai (Yahoo Finance) и RSS (Интерфакс, Профинанс).
  * Кэширование в data/news_cache.json на 15 минут.
  */
 
@@ -21,9 +21,7 @@ function news_cache_set(string $key, array $items): void {
 }
 
 /**
- * Новости из FreeNewsApi.ai.
- * @param string $ticker Тикер для поиска.
- * @param int $limit Количество новостей.
+ * Новости из FreeNewsApi.ai (для US-тикеров и общих финансовых новостей).
  */
 function get_yahoo_news(string $ticker = '', int $limit = 5): array {
     if ($ticker === '') return [];
@@ -38,16 +36,14 @@ function get_yahoo_news(string $ticker = '', int $limit = 5): array {
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_TIMEOUT => 10,
-        CURLOPT_SSL_VERIFYPEER => false, // На всякий случай для shared-хостингов
+        CURLOPT_SSL_VERIFYPEER => false,
         CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
     ]);
     $raw = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
 
-    if (!$raw || $httpCode !== 200) {
-        return [];
-    }
+    if (!$raw || $httpCode !== 200) return [];
 
     $json = json_decode($raw, true);
     $articles = $json['results'] ?? [];
@@ -58,34 +54,71 @@ function get_yahoo_news(string $ticker = '', int $limit = 5): array {
             'title' => $a['title'] ?? 'Без заголовка',
             'url'   => $a['url'] ?? '#',
             'date'  => $a['published_at'] ?? null,
-            'source'=> $a['sitename'] ?? 'Новости', // Берем имя сайта из API
+            'source'=> $a['sitename'] ?? 'Yahoo Finance',
         ];
     }
 
-    // Сохраняем в кэш, даже если пусто (чтобы не долбить API зря)
     news_cache_set($cacheKey, $out);
     return $out;
 }
 
 /**
- * Заглушка для Eulerpool (отключена, так как Cloudflare блокирует сервер).
+ * Новости с финансовых RSS-лент (Интерфакс, Профинанс) для MOEX.
  */
-function get_eulerpool_news(string $ticker = '', int $limit = 5): array {
-    return []; 
-}
+function get_moex_news(string $ticker = '', int $limit = 5): array {
+    $cacheKey = 'moex_' . strtoupper($ticker) . '_' . $limit;
+    if ($cached = news_cache_get($cacheKey)) return $cached;
 
-/**
- * Объединяет новости и сортирует по дате.
- */
-function get_financial_news(string $ticker = '', int $limit = 5): array {
-    $freenews = get_yahoo_news($ticker, $limit);
-    
-    // Сортируем по дате (новые сверху)
-    usort($freenews, function ($a, $b) {
+    $feeds = [
+        'https://www.interfax.ru/rss.asp' => 'Интерфакс',
+        'https://www.profinance.ru/fond.xml' => 'Профинанс',
+    ];
+
+    $out = [];
+    foreach ($feeds as $url => $sourceName) {
+        $rss = @simplexml_load_file($url, 'SimpleXMLElement', LIBXML_NOCDATA | LIBXML_NOERROR);
+        if ($rss === false || !isset($rss->channel->item)) continue;
+
+        foreach ($rss->channel->item as $item) {
+            $title = (string)$item->title;
+            $link  = (string)$item->link;
+            $date  = (string)$item->pubDate;
+
+            if ($ticker !== '' && stripos($title, $ticker) === false) continue;
+
+            $out[] = [
+                'title' => $title ?: 'Без заголовка',
+                'url'   => $link ?: '#',
+                'date'  => $date ? date('c', strtotime($date)) : null,
+                'source'=> $sourceName,
+            ];
+        }
+    }
+
+    usort($out, function ($a, $b) {
         $ta = $a['date'] ? strtotime($a['date']) : 0;
         $tb = $b['date'] ? strtotime($b['date']) : 0;
         return $tb <=> $ta;
     });
 
-    return array_slice($freenews, 0, $limit);
+    $out = array_slice($out, 0, $limit);
+    news_cache_set($cacheKey, $out);
+    return $out;
+}
+
+/**
+ * Объединяет новости Yahoo и MOEX (если тикер российский).
+ */
+function get_financial_news(string $ticker = '', int $limit = 5): array {
+    $yahoo = get_yahoo_news($ticker, $limit);
+    $moex = get_moex_news($ticker, $limit);
+    $all = array_merge($yahoo, $moex);
+    
+    usort($all, function ($a, $b) {
+        $ta = $a['date'] ? strtotime($a['date']) : 0;
+        $tb = $b['date'] ? strtotime($b['date']) : 0;
+        return $tb <=> $ta;
+    });
+
+    return array_slice($all, 0, $limit);
 }
