@@ -1,19 +1,35 @@
-# StockForecast — прогнозы и верификация акций MOEX и US
+# StockForecast
 
-PHP + MySQL (PDO) проект. Работает на любом shared-хостинге с PHP 7.4+
-(нужны расширения `pdo_mysql` и `allow_url_fopen`, обычно включены).
+Прогнозы и верификация акций MOEX и US. PHP + MySQL.
 
 Три независимые линии прогноза на каждый тикер, автоматическая верификация
-по фактической истории цен и расчёт точности (MAPE, hit-rate).
+с фактической историей цен (до 20 лет), расчёт точности (MAPE, hit-rate),
+сравнение тикеров, экспорт CSV и PNG, RSI, MACD, Bollinger Bands, скользящие средние (SMA/EMA),
+фоновые задачи (Cron) и Telegram-уведомления.
 
-## Развёртывание
+---
 
-1. Загрузите папку `stock-forecast/` на сервер (например в `public_html/`).
-2. Создайте базу данных MySQL в панели хостинга и пропишите доступы в `config.php`:
-   ```php
-   define('DB_HOST', 'localhost');
-   define('DB_PORT', 3306);
-   define('DB_NAME', 'stockforecast');
-   define('DB_USER', 'sf_user');
-   define('DB_PASS', 'ваш_пароль');
-   define('DB_CHARSET', 'utf8mb4');
+## 📋 Требования
+
+- PHP 7.4+ с расширениями `pdo_mysql`, `mbstring`
+- MySQL 5.7+ / MariaDB 10.3+
+- Исходящие HTTP-запросы к `iss.moex.com`, `query1.finance.yahoo.com`, `stooq.com`
+- Для Cron: доступ к CLI (запуск `php` из консоли)
+
+## 🚀 Быстрый старт
+
+```bash
+# 1. Клонировать
+git clone git@github.com:CAPITALOV/StockForecast.git
+cd StockForecast
+
+# 2. Настроить БД
+cp config.example.php config.php
+# отредактировать config.php
+
+# 3. Создать папку для кэша
+mkdir -p data
+chmod 775 data
+
+# 4. Открыть в браузере: http://ваш-домен/index.php
+# 5. Зайти в ?r=admin-login (admin / admin) и сменить пароль
