@@ -1,8 +1,9 @@
+cat > README.md <<'EOF'
 # StockForecast (by KAPITALOV)
 
 Проект сайта для размещения и публикации прогнозов, созданных компанией **KAPITALOV** для прогнозирования движения трендов акций, индексов и эмитентов для дальнейшей торговой стратегии.
 
-Три независимые линии прогноза на каждый тикер. Автоматическая верификация с фактической историей цен (до 20 лет) с бирж MOEX ISS и Yahoo Finance. Прозрачный расчёт точности — без «подгонки» задним числом. Расчёт MAPE и hit-rate, screener, сравнение тикеров, экспорт CSV и PNG, RSI, MACD, Bollinger Bands, скользящие средние (SMA/EMA), фоновые задачи (Cron) и Telegram-уведомления.
+Три независимые линии прогноза на каждый тикер. Автоматическая верификация с фактической историей цен (до 20 лет) с бирж MOEX ISS и Yahoo Finance. Прозрачный расчёт точности — без «подгонки» задним числом. Расчёт MAPE и hit-rate, screener, сравнение тикеров, экспорт CSV и PNG, RSI, MACD, Bollinger Bands, японские свечи, скользящие средние (SMA/EMA), фоновые задачи (Cron) и Telegram-уведомления.
 
 ---
 
@@ -10,31 +11,24 @@
 
 ![Легенда StockForecast: линии, индикаторы, статусы](static/legend.svg)
 
-*Зелёная — факт. Красная/синяя/оранжевая — три линии прогноза. Жёлтая — SMA/EMA. Голубая — Bollinger Bands. Фиолетовая — RSI. MACD с гистограммой. Статусы: сбылся (≤ 2%), частично (2–5%), не сбылся (> 5%).*
+*Зелёная — факт (или свечи). Красная/синяя/оранжевая — три линии прогноза. Жёлтая — SMA/EMA. Голубая — Bollinger Bands. Фиолетовая — RSI. MACD с гистограммой. Статусы: сбылся (≤ 2%), частично (2–5%), не сбылся (> 5%).*
 
 ---
 
 ## 📋 Требования
 
-- PHP 7.4+ с расширениями `pdo_mysql`, `mbstring`
+- PHP 7.4+ с расширениями `pdo_mysql`, `mbstring`, `curl`
 - MySQL 5.7+ / MariaDB 10.3+
 - Исходящие HTTP-запросы к `iss.moex.com`, `query1.finance.yahoo.com`, `stooq.com`
-- Для Cron: доступ к CLI (запуск `php` из консоли)
+- Для Cron: доступ к CLI
 
 ## 🚀 Быстрый старт
 
 ```bash
-# 1. Клонировать
-git clone git@github.com:CAPITALOV/StockForecast.git
+git clone git@github.com:CAPITALOV/StockForecast-by-KAPITALOV.git
 cd StockForecast
-
-# 2. Настроить БД
 cp config.example.php config.php
 # отредактировать config.php (DB_HOST, DB_NAME, DB_USER, DB_PASS)
-
-# 3. Создать папку для кэша
 mkdir -p data
 chmod 775 data
-
-# 4. Открыть в браузере: http://ваш-домен/index.php
-# 5. Зайти в ?r=admin-login (admin / admin) и сменить пароль
+# Открыть в браузере: http://ваш-домен/index.php
