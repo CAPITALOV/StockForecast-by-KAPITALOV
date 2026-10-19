@@ -12,6 +12,7 @@ $stockSample = $pdo->query(
 )->fetchAll();
 
 $flash = get_flash();
+$currentChartType = get_setting('chart_type', 'line');
 ?>
 <!doctype html>
 <html lang="ru">
@@ -189,6 +190,26 @@ $flash = get_flash();
 </tbody>
 </table>
 <?php endif; ?>
+
+<hr style="margin:40px 0 24px;border:0;border-top:1px solid #2a2e39">
+
+<!-- ================= НАСТРОЙКИ ОТОБРАЖЕНИЯ ================= -->
+<h2>Настройки отображения</h2>
+<div class="card upload-card" style="max-width: 500px;">
+    <form method="post" action="<?= url('admin-settings') ?>">
+        <label>Тип графика по умолчанию
+            <select name="chart_type">
+                <option value="line" <?= $currentChartType === 'line' ? 'selected' : '' ?>>Линии (Line)</option>
+                <option value="candles" <?= $currentChartType === 'candles' ? 'selected' : '' ?>>Японские свечи (Candles)</option>
+            </select>
+        </label>
+        <p class="muted" style="font-size:12px;margin:8px 0 0">
+            Пользователь на сайте может переопределить этот выбор в селекторе «Тип графика»
+            (сохраняется в его браузере).
+        </p>
+        <button type="submit" style="margin-top: 12px;">Сохранить</button>
+    </form>
+</div>
 
 <hr style="margin:40px 0 24px;border:0;border-top:1px solid #2a2e39">
 <h2>Сменить пароль</h2>

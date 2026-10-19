@@ -75,31 +75,17 @@ function db_init($pdo) {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
 
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS settings (
+            `key` VARCHAR(64) PRIMARY KEY,
+            `value` VARCHAR(255) NOT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
     try {
-        $cols = $pdo->query("SHOW COLUMNS FROM forecast_lines")
-                    ->fetchAll(PDO::FETCH_COLUMN);
-        if ($cols && in_array('line_num', $cols)
-                   && !in_array('ticker', $cols)) {
-            $pdo->exec("DROP TABLE forecast_lines");
-            $pdo->exec("
-                CREATE TABLE forecast_lines (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    market VARCHAR(16) NOT NULL,
-                    ticker VARCHAR(32) NOT NULL,
-                    line_num TINYINT UNSIGNED NOT NULL,
-                    value_type VARCHAR(10) NOT NULL DEFAULT 'price',
-                    content MEDIUMTEXT NULL,
-                    updated_at DATETIME NULL,
-                    UNIQUE KEY uniq_market_ticker_line (market, ticker, line_num),
-                    KEY idx_market_ticker (market, ticker)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-            ");
-        } else {
-            if (!in_array('value_type', $cols)) {
-                $pdo->exec("ALTER TABLE forecast_lines
-                            ADD COLUMN value_type VARCHAR(10) NOT NULL DEFAULT 'price'
-                            AFTER line_num");
-            }
+        $cols = $pdo->query("SHOW COLUMNS FROM forecast_lines")->fetchAll(PDO::FETCH_COLUMN);
+        if (!in_array('value_type', $cols)) {
+            $pdo->exec("ALTER TABLE forecast_lines ADD COLUMN value_type VARCHAR(10) NOT NULL DEFAULT 'price' AFTER line_num");
         }
     } catch (PDOException $e) {}
 
@@ -110,15 +96,28 @@ function db_init($pdo) {
         }
     } catch (PDOException $e) {}
 
+    // Миграция для OHLC (Свечи)
+    try {
+        $cols = $pdo->query("SHOW COLUMNS FROM history_bars")->fetchAll(PDO::FETCH_COLUMN);
+        if (!in_array('open', $cols)) {
+            $pdo->exec("ALTER TABLE history_bars ADD COLUMN open DECIMAL(18,6) NULL AFTER ts");
+        }
+        if (!in_array('high', $cols)) {
+            $pdo->exec("ALTER TABLE history_bars ADD COLUMN high DECIMAL(18,6) NULL AFTER open");
+        }
+        if (!in_array('low', $cols)) {
+            $pdo->exec("ALTER TABLE history_bars ADD COLUMN low DECIMAL(18,6) NULL AFTER high");
+        }
+    } catch (PDOException $e) {}
+
     $c = (int)$pdo->query("SELECT COUNT(*) FROM admins")->fetchColumn();
     if ($c === 0) {
-        $stmt = $pdo->prepare(
-            "INSERT INTO admins (username, password_hash) VALUES (?, ?)"
-        );
+        $stmt = $pdo->prepare("INSERT INTO admins (username, password_hash) VALUES (?, ?)");
         $stmt->execute(['admin', password_hash('admin', PASSWORD_DEFAULT)]);
     }
 }
 
+// ================== HELPERS ==================
 function url($r, $params = []) {
     return 'index.php?' . http_build_query(array_merge(['r' => $r], $params));
 }
@@ -144,4 +143,25 @@ function require_admin() {
 
 function tolower($s) {
     return function_exists('mb_strtolower') ? mb_strtolower($s, 'UTF-8') : strtolower($s);
+}
+
+function get_setting($key, $default = null) {
+    static $cache = [];
+    if (isset($cache[$key])) return $cache[$key];
+    try {
+        $stmt = db()->prepare("SELECT value FROM settings WHERE `key` = ?");
+        $stmt->execute([$key]);
+        $val = $stmt->fetchColumn();
+        $cache[$key] = ($val !== false) ? $val : $default;
+        return $cache[$key];
+    } catch (Throwable $e) {
+        return $default;
+    }
+}
+
+function set_setting($key, $value) {
+    try {
+        $stmt = db()->prepare("INSERT INTO settings (`key`, `value`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)");
+        $stmt->execute([$key, $value]);
+    } catch (Throwable $e) {}
 }

@@ -32,10 +32,7 @@ function moex_shares() {
     foreach ($j['securities']['data'] as $row) {
         $rec = array_combine($cols, $row);
         if (!empty($rec['SECID'])) {
-            $out[] = [
-                'ticker' => $rec['SECID'],
-                'name'   => $rec['SHORTNAME'] ?: $rec['SECID'],
-            ];
+            $out[] = ['ticker' => $rec['SECID'], 'name' => $rec['SHORTNAME'] ?: $rec['SECID']];
         }
     }
     if (empty($out)) return $stale ?: [];
@@ -58,18 +55,12 @@ function moex_history($ticker, $days = DEFAULT_DAYS) {
     $deadline = time() + 30;
 
     if (moex_is_index($ticker)) {
-        $urls = [
-            'https://iss.moex.com/iss/history/engines/stock/markets/index/securities/'
-                . rawurlencode($ticker) . '.json',
-        ];
+        $urls = ['https://iss.moex.com/iss/history/engines/stock/markets/index/securities/' . rawurlencode($ticker) . '.json'];
     } else {
         $urls = [
-            'https://iss.moex.com/iss/history/engines/stock/markets/shares/boards/TQBR/securities/'
-                . rawurlencode($ticker) . '.json',
-            'https://iss.moex.com/iss/history/engines/stock/markets/index/securities/'
-                . rawurlencode($ticker) . '.json',
-            'https://iss.moex.com/iss/history/engines/stock/markets/shares/boards/TQTF/securities/'
-                . rawurlencode($ticker) . '.json',
+            'https://iss.moex.com/iss/history/engines/stock/markets/shares/boards/TQBR/securities/' . rawurlencode($ticker) . '.json',
+            'https://iss.moex.com/iss/history/engines/stock/markets/index/securities/' . rawurlencode($ticker) . '.json',
+            'https://iss.moex.com/iss/history/engines/stock/markets/shares/boards/TQTF/securities/' . rawurlencode($ticker) . '.json',
         ];
     }
     foreach ($urls as $base) {
@@ -81,8 +72,7 @@ function moex_history($ticker, $days = DEFAULT_DAYS) {
 }
 
 function moex_history_fetch($base, $from, $till, $deadline) {
-    $url = $base . '?from=' . $from . '&till=' . $till
-         . '&iss.meta=off&iss.only=history&history.columns=TRADEDATE,CLOSE';
+    $url = $base . '?from=' . $from . '&till=' . $till . '&iss.meta=off&iss.only=history&history.columns=TRADEDATE,OPEN,HIGH,LOW,CLOSE';
     $out   = [];
     $start = 0;
     $limit = 100;
@@ -96,8 +86,16 @@ function moex_history_fetch($base, $from, $till, $deadline) {
         $rows = $j['history']['data'];
         if (empty($rows)) break;
         foreach ($rows as $row) {
-            if ($row[1] === null) continue;
-            $out[] = ['time' => (string)$row[0], 'value' => (float)$row[1]];
+            if ($row[4] === null) continue;
+            $c = (float)$row[4];
+            $out[] = [
+                'time'  => (string)$row[0],
+                'open'  => $row[1] !== null ? (float)$row[1] : $c,
+                'high'  => $row[2] !== null ? (float)$row[2] : $c,
+                'low'   => $row[3] !== null ? (float)$row[3] : $c,
+                'close' => $c,
+                'value' => $c,
+            ];
         }
         if (count($rows) < $limit) break;
         $start += $limit;
@@ -107,46 +105,54 @@ function moex_history_fetch($base, $from, $till, $deadline) {
 
 function us_stocks_list() {
     return [
-        ['ticker' => 'AAPL',  'name' => 'Apple Inc.'],
-        ['ticker' => 'MSFT',  'name' => 'Microsoft Corp.'],
+        ['ticker' => 'AAPL', 'name' => 'Apple Inc.'],
+        ['ticker' => 'MSFT', 'name' => 'Microsoft Corp.'],
         ['ticker' => 'GOOGL', 'name' => 'Alphabet Inc.'],
-        ['ticker' => 'AMZN',  'name' => 'Amazon.com Inc.'],
-        ['ticker' => 'TSLA',  'name' => 'Tesla Inc.'],
-        ['ticker' => 'META',  'name' => 'Meta Platforms'],
-        ['ticker' => 'NVDA',  'name' => 'NVIDIA Corp.'],
-        ['ticker' => 'NFLX',  'name' => 'Netflix Inc.'],
-        ['ticker' => 'JPM',   'name' => 'JPMorgan Chase'],
-        ['ticker' => 'V',     'name' => 'Visa Inc.'],
-        ['ticker' => 'BAC',   'name' => 'Bank of America'],
-        ['ticker' => 'XOM',   'name' => 'Exxon Mobil'],
-        ['ticker' => 'WMT',   'name' => 'Walmart Inc.'],
-        ['ticker' => 'DIS',   'name' => 'Walt Disney'],
-        ['ticker' => 'AMD',   'name' => 'Advanced Micro Devices'],
-        ['ticker' => 'INTC',  'name' => 'Intel Corp.'],
-        ['ticker' => 'CSCO',  'name' => 'Cisco Systems'],
-        ['ticker' => 'PFE',   'name' => 'Pfizer Inc.'],
-        ['ticker' => 'KO',    'name' => 'Coca-Cola Co.'],
-        ['ticker' => 'PEP',   'name' => 'PepsiCo Inc.'],
+        ['ticker' => 'AMZN', 'name' => 'Amazon.com Inc.'],
+        ['ticker' => 'TSLA', 'name' => 'Tesla Inc.'],
+        ['ticker' => 'META', 'name' => 'Meta Platforms'],
+        ['ticker' => 'NVDA', 'name' => 'NVIDIA Corp.'],
+        ['ticker' => 'NFLX', 'name' => 'Netflix Inc.'],
+        ['ticker' => 'JPM', 'name' => 'JPMorgan Chase'],
+        ['ticker' => 'V', 'name' => 'Visa Inc.'],
+        ['ticker' => 'BAC', 'name' => 'Bank of America'],
+        ['ticker' => 'XOM', 'name' => 'Exxon Mobil'],
+        ['ticker' => 'WMT', 'name' => 'Walmart Inc.'],
+        ['ticker' => 'DIS', 'name' => 'Walt Disney'],
+        ['ticker' => 'AMD', 'name' => 'Advanced Micro Devices'],
+        ['ticker' => 'INTC', 'name' => 'Intel Corp.'],
+        ['ticker' => 'CSCO', 'name' => 'Cisco Systems'],
+        ['ticker' => 'PFE', 'name' => 'Pfizer Inc.'],
+        ['ticker' => 'KO', 'name' => 'Coca-Cola Co.'],
+        ['ticker' => 'PEP', 'name' => 'PepsiCo Inc.'],
     ];
 }
 
 function us_history($ticker, $days = DEFAULT_DAYS) {
     $p1 = time() - $days * 86400;
     $p2 = time();
-    $url = 'https://query1.finance.yahoo.com/v8/finance/chart/' . rawurlencode($ticker)
-         . '?period1=' . $p1 . '&period2=' . $p2 . '&interval=1d';
+    $url = 'https://query1.finance.yahoo.com/v8/finance/chart/' . rawurlencode($ticker) . '?period1=' . $p1 . '&period2=' . $p2 . '&interval=1d';
     $raw = http_get($url, 10, true);
     if ($raw) {
         $j = json_decode($raw, true);
         if (isset($j['chart']['result'][0])) {
             $res = $j['chart']['result'][0];
             $out = [];
-            $closes = isset($res['indicators']['quote'][0]['close'])
-                    ? $res['indicators']['quote'][0]['close'] : [];
+            $opens = $res['indicators']['quote'][0]['open'] ?? [];
+            $highs = $res['indicators']['quote'][0]['high'] ?? [];
+            $lows  = $res['indicators']['quote'][0]['low'] ?? [];
+            $closes= $res['indicators']['quote'][0]['close'] ?? [];
             foreach ((isset($res['timestamp']) ? $res['timestamp'] : []) as $i => $ts) {
-                $c = isset($closes[$i]) ? $closes[$i] : null;
+                $c = $closes[$i] ?? null;
                 if ($c === null) continue;
-                $out[] = ['time' => date('Y-m-d', (int)$ts), 'value' => (float)$c];
+                $out[] = [
+                    'time'  => date('Y-m-d', (int)$ts),
+                    'open'  => $opens[$i] ?? $c,
+                    'high'  => $highs[$i] ?? $c,
+                    'low'   => $lows[$i] ?? $c,
+                    'close' => (float)$c,
+                    'value' => (float)$c,
+                ];
             }
             if (!empty($out)) return $out;
         }
@@ -161,7 +167,15 @@ function us_history($ticker, $days = DEFAULT_DAYS) {
         $p = explode(',', $line);
         if (count($p) < 5) continue;
         if ($p[0] < $cutoff) continue;
-        $out[] = ['time' => $p[0], 'value' => (float)$p[4]];
+        $c = (float)$p[4];
+        $out[] = [
+            'time'  => $p[0],
+            'open'  => (float)$p[1],
+            'high'  => (float)$p[2],
+            'low'   => (float)$p[3],
+            'close' => $c,
+            'value' => $c,
+        ];
     }
     return $out;
 }
