@@ -6,6 +6,7 @@ if (php_sapi_name() !== 'cli') {
 }
 
 require dirname(__DIR__) . '/bootstrap.php';
+require dirname(__DIR__) . '/lib/history.php'; // <--- ДОБАВЛЕНА ЭТА СТРОКА
 require dirname(__DIR__) . '/lib/forecast.php';
 require dirname(__DIR__) . '/lib/verify.php';
 require dirname(__DIR__) . '/lib/telegram.php';
