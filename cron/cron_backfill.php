@@ -4,14 +4,15 @@ if (php_sapi_name() !== 'cli') {
     http_response_code(403);
     die('For CLI only');
 }
-require __DIR__ . '/bootstrap.php';
-require __DIR__ . '/lib/api.php';
-require __DIR__ . '/lib/history.php';
-require __DIR__ . '/lib/forecast.php';
 
-$days = 7300;
+require dirname(__DIR__) . '/bootstrap.php';
+require dirname(__DIR__) . '/lib/api.php';
+require dirname(__DIR__) . '/lib/history.php';
+require dirname(__DIR__) . '/lib/forecast.php';
+
+$days = 7300; // 20 лет
 $startTime = time();
-$maxDur = 600;
+$maxDur = 600; // максимум 10 минут работы
 $processed = 0;
 $failed = 0;
 
@@ -27,6 +28,7 @@ while (time() - $startTime < $maxDur) {
            AND (sm.history_skip_until IS NULL OR sm.history_skip_until < NOW())
          LIMIT 1"
     )->fetch();
+    
     if (!$row) break;
 
     try {
@@ -47,7 +49,10 @@ while (time() - $startTime < $maxDur) {
              WHERE market = ? AND ticker = ?"
         )->execute([$row['market'], $row['ticker']]);
     }
+    
     echo "[" . date('Y-m-d H:i:s') . "] Processed: {$processed}, failed: {$failed}\n";
+    
+    // Ограничиваем количество за один запуск, чтобы не зависнуть
     if ($processed + $failed >= 5) break;
 }
 
