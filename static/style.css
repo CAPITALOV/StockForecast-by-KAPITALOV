@@ -195,3 +195,17 @@ footer { text-align: center; color: #666; padding: 24px; font-size: 12px; }
 }
 .macd-hist-pos { color: #26a69a; }
 .macd-hist-neg { color: #ef5350; }
+
+/* ======== Новости ======== */
+.news-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    font-size: 14px;
+    background: #1e222d;
+}
+.news-icon.yahoo { color: #ba68c8; }
+.news-icon.euler { color: #64b5f6; }

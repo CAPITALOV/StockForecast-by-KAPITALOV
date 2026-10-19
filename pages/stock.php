@@ -90,6 +90,43 @@ if ($ticker === '') { header('Location: ' . url('home')); exit; }
 <p class="muted">Сравнение прогнозной цены с фактической историей. Delta пересчитана через cumprod.</p>
 <div id="verify-container"><p class="muted">Загрузка верификации…</p></div>
 
+<?php
+require_once __DIR__ . '/../lib/news.php';
+$news = get_financial_news($ticker, 5);
+?>
+<?php if (!empty($news)): ?>
+<section class="section" style="margin-top:48px">
+    <div class="section-head">
+        <h2>Новости по тикеру <?= h($ticker) ?></h2>
+    </div>
+    <div class="card">
+        <?php foreach ($news as $item): ?>
+            <div style="display:flex; gap:12px; padding:12px 0; border-bottom:1px solid #1e222d;">
+                <div style="flex-shrink:0; width:24px; text-align:center; font-size:20px;">
+                    <?php if (stripos($item['source'], 'Yahoo') !== false): ?>
+                        <span class="news-icon yahoo" title="Yahoo Finance">📰</span>
+                    <?php else: ?>
+                        <span class="news-icon euler" title="Eulerpool">📊</span>
+                    <?php endif; ?>
+                </div>
+                <div style="flex:1">
+                    <a href="<?= h($item['url']) ?>" target="_blank" rel="noopener"
+                       style="color:#26a69a; text-decoration:none; font-weight:600; font-size:15px;">
+                        <?= h($item['title']) ?>
+                    </a>
+                    <div class="muted" style="font-size:12px; margin-top:4px;">
+                        <?= h($item['source']) ?>
+                        <?php if ($item['date']): ?>
+                            · <?= date('d.m.Y H:i', strtotime($item['date'])) ?>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+        <?php endforeach; ?>
+    </div>
+</section>
+<?php endif; ?>
+
 <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
 <script>
 const MARKET = <?= json_encode($market) ?>;
