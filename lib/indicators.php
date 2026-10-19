@@ -61,6 +61,64 @@ function calc_ema(array $bars, int $period): array {
     return $out;
 }
 
+function calc_macd(array $bars, int $fast = 12, int $slow = 26, int $signal = 9): array {
+    $emaFast = calc_ema($bars, $fast);
+    $emaSlow = calc_ema($bars, $slow);
+    if (empty($emaFast) || empty($emaSlow)) return ['macd' => [], 'signal' => [], 'histogram' => []];
+
+    $fastByDate = [];
+    foreach ($emaFast as $p) $fastByDate[$p['time']] = $p['value'];
+    $slowByDate = [];
+    foreach ($emaSlow as $p) $slowByDate[$p['time']] = $p['value'];
+
+    $macd = [];
+    foreach ($fastByDate as $time => $fv) {
+        if (!isset($slowByDate[$time])) continue;
+        $macd[] = ['time' => $time, 'value' => round($fv - $slowByDate[$time], 4)];
+    }
+    usort($macd, function ($a, $b) { return strcmp($a['time'], $b['time']); });
+    if (empty($macd)) return ['macd' => [], 'signal' => [], 'histogram' => []];
+
+    $signalLine = calc_ema($macd, $signal);
+    $signalByDate = [];
+    foreach ($signalLine as $p) $signalByDate[$p['time']] = $p['value'];
+
+    $histogram = [];
+    $signalResult = [];
+    $macdResult = [];
+    foreach ($macd as $m) {
+        $t = $m['time'];
+        $macdResult[] = $m;
+        if (isset($signalByDate[$t])) {
+            $sig = $signalByDate[$t];
+            $signalResult[] = ['time' => $t, 'value' => $sig];
+            $histogram[] = ['time' => $t, 'value' => round($m['value'] - $sig, 4)];
+        }
+    }
+    return ['macd' => $macdResult, 'signal' => $signalResult, 'histogram' => $histogram];
+}
+
+function calc_bollinger(array $bars, int $period = 20, float $mult = 2.0): array {
+    $n = count($bars);
+    if ($period < 2 || $n < $period) return ['sma' => [], 'upper' => [], 'lower' => []];
+    $sma = []; $upper = []; $lower = [];
+    for ($i = $period - 1; $i < $n; $i++) {
+        $sum = 0; $sumSq = 0;
+        for ($j = $i - $period + 1; $j <= $i; $j++) {
+            $v = (float)$bars[$j]['value'];
+            $sum += $v; $sumSq += $v * $v;
+        }
+        $mean = $sum / $period;
+        $variance = ($sumSq / $period) - ($mean * $mean);
+        $std = sqrt(max(0, $variance));
+        $time = (string)$bars[$i]['time'];
+        $sma[] = ['time' => $time, 'value' => round($mean, 4)];
+        $upper[] = ['time' => $time, 'value' => round($mean + $mult * $std, 4)];
+        $lower[] = ['time' => $time, 'value' => round($mean - $mult * $std, 4)];
+    }
+    return ['sma' => $sma, 'upper' => $upper, 'lower' => $lower];
+}
+
 function average_forecast_lines(array $a, array $b): array {
     $byDate = [];
     foreach ($a as $p) { $byDate[$p['time']][] = (float)$p['value']; }

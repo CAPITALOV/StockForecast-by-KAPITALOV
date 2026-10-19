@@ -162,6 +162,62 @@ switch ($route) {
         }
         break;
 
+    case 'api-macd':
+        header('Content-Type: application/json');
+        $market = $_GET['market'] ?? 'moex';
+        $ticker = strtoupper(trim($_GET['ticker'] ?? ''));
+        $days = max(30, min(18250, (int)($_GET['days'] ?? DEFAULT_DAYS)));
+        $g = gr();
+        $fast = max(2, min(100, (int)($_GET['fast'] ?? 12)));
+        $slow = max(2, min(200, (int)($_GET['slow'] ?? 26)));
+        $signal = max(2, min(100, (int)($_GET['signal'] ?? 9)));
+        if ($fast >= $slow) $fast = max(2, $slow - 1);
+        if ($ticker === '') {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'ticker required']);
+            break;
+        }
+        try {
+            $res = history_get($market, $ticker, $days, 'auto');
+            $bars = aggregate_bars($res['data'], $g);
+            $macd = calc_macd($bars, $fast, $slow, $signal);
+            echo json_encode([
+                'ok' => true, 'fast' => $fast, 'slow' => $slow, 'signal' => $signal,
+                'granularity' => $g, 'bars' => count($bars), 'data' => $macd,
+            ], JSON_UNESCAPED_UNICODE);
+        } catch (Throwable $e) {
+            http_response_code(500);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        break;
+
+    case 'api-bollinger':
+        header('Content-Type: application/json');
+        $market = $_GET['market'] ?? 'moex';
+        $ticker = strtoupper(trim($_GET['ticker'] ?? ''));
+        $days = max(30, min(18250, (int)($_GET['days'] ?? DEFAULT_DAYS)));
+        $g = gr();
+        $period = max(2, min(100, (int)($_GET['period'] ?? 20)));
+        $mult = max(0.5, min(5.0, (float)($_GET['mult'] ?? 2.0)));
+        if ($ticker === '') {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'ticker required']);
+            break;
+        }
+        try {
+            $res = history_get($market, $ticker, $days, 'auto');
+            $bars = aggregate_bars($res['data'], $g);
+            $bb = calc_bollinger($bars, $period, $mult);
+            echo json_encode([
+                'ok' => true, 'period' => $period, 'mult' => $mult,
+                'granularity' => $g, 'bars' => count($bars), 'data' => $bb,
+            ], JSON_UNESCAPED_UNICODE);
+        } catch (Throwable $e) {
+            http_response_code(500);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        break;
+
     case 'api-verify':
         header('Content-Type: application/json');
         $market = $_GET['market'] ?? 'moex';
@@ -327,7 +383,6 @@ switch ($route) {
         include __DIR__ . '/pages/compare.php';
         break;
 
-    // ---------- Бэкфилл: 1 тикер за запрос, бюджет 20 с, режим live ----------
     case 'backfill-history':
         require_admin();
         @set_time_limit(55);
@@ -338,9 +393,9 @@ switch ($route) {
         }
 
         $isAjax    = !empty($_GET['ajax']);
-        $days      = max(365, min(18250, (int)($_GET['days'] ?? 7300)));   // по умолчанию 20 лет
+        $days      = max(365, min(18250, (int)($_GET['days'] ?? 7300)));
         $startTime = time();
-        $maxDur    = 20;   // «мягкий» дедлайн: не начинаем новый тикер после 20 с
+        $maxDur    = 20;
         $processed = 0;
         $failed    = [];
 
@@ -359,7 +414,6 @@ switch ($route) {
             if (!$row) break;
 
             try {
-                // mode='live': принудительно тянем из API, даже если в БД что-то есть
                 $res = history_get($row['market'], $row['ticker'], $days, 'live');
                 if (!empty($res['data'])) {
                     $processed++;
@@ -378,7 +432,6 @@ switch ($route) {
                 )->execute([$row['market'], $row['ticker']]);
             }
 
-            // один тикер = один батч (MOEX 20y ~20-30 с)
             break;
         }
 
