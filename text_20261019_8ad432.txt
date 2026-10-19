@@ -1,0 +1,29 @@
+.
+├── index.php              # роутер: страницы + AJAX + бэкфилл + экспорт
+├── bootstrap.php          # PDO, авто-миграции, helpers
+├── config.example.php     # шаблон (config.php в .gitignore)
+├── forecast.php           # парсер TXT/CSV
+├── lib/
+│   ├── api.php            # MOEX / Yahoo / Stooq
+│   ├── history.php        # history_bars + авто-регистрация тикера
+│   ├── import.php         # импорт из Yii
+│   ├── verify.php         # cumprod, MAPE, hit-rate, recent_hits
+│   ├── indicators.php     # RSI, SMA, EMA, MACD, Bollinger, агрегация
+│   ├── screener.php       # screener_data() — сводная точность
+│   └── telegram.php       # отправка сообщений
+├── cron/
+│   ├── cron_backfill.php   # авто-загрузка истории (раз в час)
+│   └── cron_recent_hits.php # проверка попаданий + Telegram (раз в 10 мин)
+├── pages/
+│   ├── home.php           # лендинг + «Свежие попадания»
+│   ├── stock.php          # график + RSI + MACD + Bollinger + верификация
+│   ├── accuracy.php       # точность по линиям
+│   ├── screener.php       # сводная таблица всех тикеров
+│   ├── compare.php        # сравнение до 5 тикеров
+│   ├── admin.php          # панель администратора
+│   └── admin-login.php
+├── static/
+│   ├── style.css
+│   └── legend.svg         # ← легенда для README (картинка)
+├── sample-data/           # тестовые CSV
+└── data/                  # кэш (в .gitignore)
