@@ -3,6 +3,9 @@ $market = $_GET['market'] ?? 'moex';
 $ticker = $_GET['ticker'] ?? '';
 $rsiPeriod = max(2, min(100, (int)($_GET['rsi'] ?? 14)));
 if ($ticker === '') { header('Location: ' . url('home')); exit; }
+
+require_once __DIR__ . '/../lib/news.php';
+$news = get_financial_news($ticker, 5);
 ?>
 <!doctype html>
 <html lang="ru">
@@ -20,6 +23,7 @@ if ($ticker === '') { header('Location: ' . url('home')); exit; }
         <a href="index.php?r=screener">Screener</a>
         <a href="index.php?r=accuracy">Точность</a>
         <a href="<?= is_admin() ? url('admin') : url('admin-login') ?>">Админка</a>
+        <button type="button" id="theme-toggle" class="btn" title="Переключить тему">🌓</button>
     </nav>
 </header>
 <main>
@@ -61,7 +65,7 @@ if ($ticker === '') { header('Location: ' . url('home')); exit; }
     <label id="ma-period-wrap" style="display:none">
         Период MA:
         <input type="number" id="ma-period" min="2" max="200" value="20"
-               style="width:64px;padding:6px;background:#131722;color:#e6e6e6;border:1px solid #2a2e39;border-radius:6px">
+               style="width:64px;padding:6px;background:var(--bg-card);color:var(--text);border:1px solid var(--border);border-radius:6px">
         <span id="ma-hint" class="muted" style="margin-left:4px"></span>
     </label>
     <label>
@@ -90,10 +94,17 @@ if ($ticker === '') { header('Location: ' . url('home')); exit; }
 <p class="muted">Сравнение прогнозной цены с фактической историей. Delta пересчитана через cumprod.</p>
 <div id="verify-container"><p class="muted">Загрузка верификации…</p></div>
 
-<?php
-require_once __DIR__ . '/../lib/news.php';
-$news = get_financial_news($ticker, 5);
-?>
+<!-- Сравнение прогнозов -->
+<section class="section" style="margin-top:48px">
+    <div class="section-head">
+        <h2>Сравнение моделей прогноза</h2>
+        <p class="muted">Все три линии на одном графике (нормализованы к 100 на начальную дату).</p>
+    </div>
+    <div id="compare-forecasts-chart" class="chart" style="height:360px"></div>
+    <div id="compare-forecasts-legend" class="legend"></div>
+</section>
+
+<!-- Новости -->
 <?php if (!empty($news)): ?>
 <section class="section" style="margin-top:48px">
     <div class="section-head">
@@ -101,17 +112,19 @@ $news = get_financial_news($ticker, 5);
     </div>
     <div class="card">
         <?php foreach ($news as $item): ?>
-            <div style="display:flex; gap:12px; padding:12px 0; border-bottom:1px solid #1e222d;">
+            <div style="display:flex; gap:12px; padding:12px 0; border-bottom:1px solid var(--border);">
                 <div style="flex-shrink:0; width:24px; text-align:center; font-size:20px;">
-                    <?php if (stripos($item['source'], 'Yahoo') !== false): ?>
+                    <?php if (stripos($item['source'], 'Yahoo') !== false || stripos($item['source'], 'FreeNews') !== false): ?>
                         <span class="news-icon yahoo" title="Yahoo Finance">📰</span>
+                    <?php elseif (stripos($item['source'], 'Интерфакс') !== false): ?>
+                        <span class="news-icon moex" title="Интерфакс">🏦</span>
                     <?php else: ?>
-                        <span class="news-icon euler" title="Eulerpool">📊</span>
+                        <span class="news-icon euler" title="<?= h($item['source']) ?>">📊</span>
                     <?php endif; ?>
                 </div>
                 <div style="flex:1">
                     <a href="<?= h($item['url']) ?>" target="_blank" rel="noopener"
-                       style="color:#26a69a; text-decoration:none; font-weight:600; font-size:15px;">
+                       style="color:var(--accent); text-decoration:none; font-weight:600; font-size:15px;">
                         <?= h($item['title']) ?>
                     </a>
                     <div class="muted" style="font-size:12px; margin-top:4px;">
@@ -142,21 +155,24 @@ const statusEl   = document.getElementById('status');
 const maHintEl   = document.getElementById('ma-hint');
 
 const commonOpts = {
-    layout: { background: { color: '#131722' }, textColor: '#d1d4dc' },
-    grid: { vertLines: { color: '#1e222d' }, horzLines: { color: '#1e222d' } },
+    layout: { background: { color: getComputedStyle(document.body).getPropertyValue('--bg-card').trim() || '#131722' }, textColor: getComputedStyle(document.body).getPropertyValue('--text').trim() || '#d1d4dc' },
+    grid: { vertLines: { color: getComputedStyle(document.body).getPropertyValue('--border').trim() || '#1e222d' }, horzLines: { color: getComputedStyle(document.body).getPropertyValue('--border').trim() || '#1e222d' } },
     crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
 };
 const chart = LightweightCharts.createChart(chartEl, Object.assign({}, commonOpts, {
     width: chartEl.clientWidth, height: 480,
-    leftPriceScale:  { visible: true, borderColor: '#2a2e39', scaleMargins: { top: 0.1, bottom: 0.1 } },
-    rightPriceScale: { visible: true, borderColor: '#2a2e39', scaleMargins: { top: 0.1, bottom: 0.1 } },
-    timeScale: { borderColor: '#2a2e39', visible: true },
+    leftPriceScale:  { visible: true, borderColor: getComputedStyle(document.body).getPropertyValue('--border').trim() || '#2a2e39', scaleMargins: { top: 0.1, bottom: 0.1 } },
+    rightPriceScale: { visible: true, borderColor: getComputedStyle(document.body).getPropertyValue('--border').trim() || '#2a2e39', scaleMargins: { top: 0.1, bottom: 0.1 } },
+    timeScale: { borderColor: getComputedStyle(document.body).getPropertyValue('--border').trim() || '#2a2e39', visible: true },
 }));
+window.chart = chart;
+
 const rsiChart = LightweightCharts.createChart(rsiChartEl, Object.assign({}, commonOpts, {
     width: rsiChartEl.clientWidth, height: 160,
-    rightPriceScale: { borderColor: '#2a2e39', scaleMargins: { top: 0.1, bottom: 0.1 } },
-    timeScale: { borderColor: '#2a2e39', visible: true },
+    rightPriceScale: { borderColor: getComputedStyle(document.body).getPropertyValue('--border').trim() || '#2a2e39', scaleMargins: { top: 0.1, bottom: 0.1 } },
+    timeScale: { borderColor: getComputedStyle(document.body).getPropertyValue('--border').trim() || '#2a2e39', visible: true },
 }));
+window.rsiChart = rsiChart;
 
 const priceSeries = chart.addLineSeries({
     color: '#26a69a', lineWidth: 2, title: 'Close',
@@ -189,6 +205,7 @@ let forecastSeries = [];
 let maSeries = null;
 let bbSeries = [];
 let macdSeries = [];
+let compareForecastsChart = null;
 
 const legendState = { price: 0, lines: [], ma: null, bb: null, lower: 0 };
 
@@ -280,6 +297,7 @@ async function loadAll() {
     rsiChart.timeScale().fitContent();
     statusEl.textContent = 'Готово';
     loadVerification();
+    loadCompareForecasts();
 }
 
 async function loadMA() {
@@ -456,6 +474,63 @@ function renderVerification(lines) {
     box.innerHTML = html;
 }
 
+async function loadCompareForecasts() {
+    const chartEl = document.getElementById('compare-forecasts-chart');
+    const legendEl = document.getElementById('compare-forecasts-legend');
+    if (!chartEl) return;
+
+    if (compareForecastsChart) {
+        compareForecastsChart.remove();
+        compareForecastsChart = null;
+    }
+
+    compareForecastsChart = LightweightCharts.createChart(chartEl, {
+        width: chartEl.clientWidth,
+        height: 360,
+        layout: { background: { color: getComputedStyle(document.body).getPropertyValue('--bg-card').trim() || '#131722' }, textColor: getComputedStyle(document.body).getPropertyValue('--text').trim() || '#d1d4dc' },
+        grid: { vertLines: { color: getComputedStyle(document.body).getPropertyValue('--border').trim() || '#1e222d' }, horzLines: { color: getComputedStyle(document.body).getPropertyValue('--border').trim() || '#1e222d' } },
+        rightPriceScale: { borderColor: getComputedStyle(document.body).getPropertyValue('--border').trim() || '#2a2e39' },
+        timeScale: { borderColor: getComputedStyle(document.body).getPropertyValue('--border').trim() || '#2a2e39' },
+    });
+    window.compareForecastsChart = compareForecastsChart;
+
+    const url = `index.php?r=api-forecast&market=${encodeURIComponent(MARKET)}&ticker=${encodeURIComponent(TICKER)}`;
+    const res = await fetch(url);
+    const data = await res.json();
+
+    const lines = data.lines || [];
+    const colors = { 1: '#ef5350', 2: '#42a5f5', 3: '#ffa726' };
+    const legendItems = [];
+
+    for (const line of lines) {
+        if (!line.data || line.data.length === 0) continue;
+        const base = line.data[0].value;
+        if (base === 0) continue;
+        const normalized = line.data.map(p => ({
+            time: p.time,
+            value: (p.value / base) * 100,
+        }));
+
+        const series = compareForecastsChart.addLineSeries({
+            color: colors[line.line_num] || '#888',
+            lineWidth: 2,
+            title: line.name,
+        });
+        series.setData(normalized);
+        legendItems.push({
+            color: colors[line.line_num],
+            name: line.name,
+            points: normalized.length,
+        });
+    }
+
+    legendEl.innerHTML = legendItems.map(i =>
+        `<span class="legend-item"><i style="background:${i.color}"></i> ${i.name} (${i.points})</span>`
+    ).join('');
+
+    compareForecastsChart.timeScale().fitContent();
+}
+
 document.getElementById('btn-export-png').addEventListener('click', function () {
     try {
         const mainCanvas = chart.takeScreenshot();
@@ -468,7 +543,7 @@ document.getElementById('btn-export-png').addEventListener('click', function () 
         outCanvas.width = Math.max(mainCanvas.width, lowerCanvas.width);
         outCanvas.height = mainCanvas.height + lowerCanvas.height + gap;
 
-        ctx.fillStyle = '#131722';
+        ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--bg-card').trim() || '#131722';
         ctx.fillRect(0, 0, outCanvas.width, outCanvas.height);
 
         ctx.drawImage(mainCanvas, 0, 0);
@@ -499,9 +574,13 @@ document.getElementById('ma-period').addEventListener('input', function () {
 window.addEventListener('resize', function () {
     chart.applyOptions({ width: chartEl.clientWidth });
     rsiChart.applyOptions({ width: rsiChartEl.clientWidth });
+    if (compareForecastsChart) {
+        compareForecastsChart.applyOptions({ width: document.getElementById('compare-forecasts-chart').clientWidth });
+    }
 });
 loadAll();
 </script>
+<script src="static/theme.js"></script>
 </main>
 <footer>© StockForecast</footer>
 </body>
