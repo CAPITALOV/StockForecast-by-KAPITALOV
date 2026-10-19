@@ -1,0 +1,5 @@
+Options -Indexes
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^(data|lib|config\.php|bootstrap\.php) - [F,L]
+</IfModule>
