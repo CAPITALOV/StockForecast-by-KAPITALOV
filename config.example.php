@@ -14,5 +14,11 @@ define('MOEX_CACHE_TTL', 86400);
 
 // ================== TELEGRAM ==================
 // Оставьте пустыми, если уведомления не нужны
-define('TELEGRAM_BOT_TOKEN', ''); // токен от @BotFather
-define('TELEGRAM_CHAT_ID', '');   // ID чата/канала
+define('TELEGRAM_BOT_TOKEN', '');
+define('TELEGRAM_CHAT_ID', '');
+
+// ================== NEWS ==================
+// Ключ Eulerpool (бесплатный, 100k запросов/мес).
+// Регистрация: https://eulerpool.com/
+// Если оставить пустым — будут только новости Yahoo Finance.
+define('EULERPOOL_KEY', '');
