@@ -1,6 +1,6 @@
 <?php
 /**
- * Финансовые новости из Yahoo Finance (через FreeNewsApi.ai) и Eulerpool.
+ * Финансовые новости из FreeNewsApi.ai (поиск по тикеру).
  * Кэширование в data/news_cache.json на 15 минут.
  */
 
@@ -21,32 +21,36 @@ function news_cache_set(string $key, array $items): void {
 }
 
 /**
- * Новости Yahoo Finance через FreeNewsApi.ai.
- * @param string $ticker Тикер для поиска (например, SBER, AAPL).
+ * Новости из FreeNewsApi.ai.
+ * @param string $ticker Тикер для поиска.
  * @param int $limit Количество новостей.
  */
 function get_yahoo_news(string $ticker = '', int $limit = 5): array {
-    $cacheKey = 'yahoo_' . strtoupper($ticker) . '_' . $limit;
+    if ($ticker === '') return [];
+    
+    $cacheKey = 'freenews_' . strtoupper($ticker) . '_' . $limit;
     if ($cached = news_cache_get($cacheKey)) return $cached;
 
-    $base = 'https://freenewsapi.ai/v1/search?host=www.wsj.com&size=' . $limit;
-    if ($ticker !== '') {
-        $base .= '&q=' . urlencode($ticker);
-    }
-    $base .= '&fields=title,url,published_at';
+    $url = 'https://freenewsapi.ai/v1/search?q=' . urlencode($ticker)
+         . '&size=' . $limit . '&sort=date';
 
-    $ch = curl_init($base);
+    $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_TIMEOUT => 10,
-        CURLOPT_USERAGENT => 'StockForecast/1.0',
+        CURLOPT_SSL_VERIFYPEER => false, // На всякий случай для shared-хостингов
+        CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
     ]);
     $raw = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
 
-    if (!$raw) return [];
+    if (!$raw || $httpCode !== 200) {
+        return [];
+    }
+
     $json = json_decode($raw, true);
-    $articles = $json['articles'] ?? $json['data'] ?? [];
+    $articles = $json['results'] ?? [];
 
     $out = [];
     foreach ($articles as $a) {
@@ -54,66 +58,34 @@ function get_yahoo_news(string $ticker = '', int $limit = 5): array {
             'title' => $a['title'] ?? 'Без заголовка',
             'url'   => $a['url'] ?? '#',
             'date'  => $a['published_at'] ?? null,
-            'source'=> 'Yahoo Finance',
+            'source'=> $a['sitename'] ?? 'Новости', // Берем имя сайта из API
         ];
     }
 
+    // Сохраняем в кэш, даже если пусто (чтобы не долбить API зря)
     news_cache_set($cacheKey, $out);
     return $out;
 }
 
 /**
- * Новости Eulerpool (требуется EULERPOOL_KEY в config.php).
- * Если ключа нет — возвращает пустой массив.
+ * Заглушка для Eulerpool (отключена, так как Cloudflare блокирует сервер).
  */
 function get_eulerpool_news(string $ticker = '', int $limit = 5): array {
-    if (!defined('EULERPOOL_KEY') || EULERPOOL_KEY === '') return [];
-
-    $cacheKey = 'euler_' . strtoupper($ticker) . '_' . $limit;
-    if ($cached = news_cache_get($cacheKey)) return $cached;
-
-    $url = 'https://api.eulerpool.com/api/1/research/news/' . urlencode($ticker ?: 'market');
-
-    $ch = curl_init($url);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 10,
-        CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . EULERPOOL_KEY],
-    ]);
-    $raw = curl_exec($ch);
-    curl_close($ch);
-
-    if (!$raw) return [];
-    $json = json_decode($raw, true);
-    $articles = $json['data'] ?? $json['news'] ?? [];
-
-    $out = [];
-    foreach (array_slice($articles, 0, $limit) as $a) {
-        $out[] = [
-            'title' => $a['title'] ?? 'Без заголовка',
-            'url'   => $a['url'] ?? '#',
-            'date'  => $a['published_at'] ?? $a['date'] ?? null,
-            'source'=> 'Eulerpool',
-        ];
-    }
-
-    news_cache_set($cacheKey, $out);
-    return $out;
+    return []; 
 }
 
 /**
- * Объединяет новости из двух источников, сортирует по дате (новые сверху).
+ * Объединяет новости и сортирует по дате.
  */
 function get_financial_news(string $ticker = '', int $limit = 5): array {
-    $yahoo = get_yahoo_news($ticker, $limit);
-    $euler = get_eulerpool_news($ticker, $limit);
-
-    $all = array_merge($yahoo, $euler);
-    usort($all, function ($a, $b) {
+    $freenews = get_yahoo_news($ticker, $limit);
+    
+    // Сортируем по дате (новые сверху)
+    usort($freenews, function ($a, $b) {
         $ta = $a['date'] ? strtotime($a['date']) : 0;
         $tb = $b['date'] ? strtotime($b['date']) : 0;
         return $tb <=> $ta;
     });
 
-    return array_slice($all, 0, $limit);
+    return array_slice($freenews, 0, $limit);
 }
