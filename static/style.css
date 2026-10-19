@@ -189,3 +189,9 @@ footer { text-align: center; color: #666; padding: 24px; font-size: 12px; }
     display: flex; align-items: baseline; gap: 8px;
     margin: 16px 0 4px; font-size: 13px;
 }
+.chart-controls label input[type=checkbox] {
+    margin-right: 4px;
+    vertical-align: middle;
+}
+.macd-hist-pos { color: #26a69a; }
+.macd-hist-neg { color: #ef5350; }

@@ -1,9 +1,11 @@
 <?php
 require __DIR__ . '/config.php';
 
-ini_set('session.name', SESSION_NAME);
-if (session_status() !== PHP_SESSION_ACTIVE) {
-    session_start();
+if (php_sapi_name() !== 'cli') {
+    ini_set('session.name', SESSION_NAME);
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        session_start();
+    }
 }
 
 function db() {
@@ -73,7 +75,6 @@ function db_init($pdo) {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
 
-    // ---------- авто-миграции forecast_lines ----------
     try {
         $cols = $pdo->query("SHOW COLUMNS FROM forecast_lines")
                     ->fetchAll(PDO::FETCH_COLUMN);
@@ -102,7 +103,6 @@ function db_init($pdo) {
         }
     } catch (PDOException $e) {}
 
-    // ---------- history_skip_until в stock_map ----------
     try {
         $cols = $pdo->query("SHOW COLUMNS FROM stock_map")->fetchAll(PDO::FETCH_COLUMN);
         if (!in_array('history_skip_until', $cols)) {
@@ -110,7 +110,6 @@ function db_init($pdo) {
         }
     } catch (PDOException $e) {}
 
-    // ---------- дефолтный админ ----------
     $c = (int)$pdo->query("SELECT COUNT(*) FROM admins")->fetchColumn();
     if ($c === 0) {
         $stmt = $pdo->prepare(
@@ -120,7 +119,6 @@ function db_init($pdo) {
     }
 }
 
-// ================== HELPERS ==================
 function url($r, $params = []) {
     return 'index.php?' . http_build_query(array_merge(['r' => $r], $params));
 }

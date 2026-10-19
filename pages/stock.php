@@ -62,6 +62,15 @@ if ($ticker === '') { header('Location: ' . url('home')); exit; }
                style="width:64px;padding:6px;background:#131722;color:#e6e6e6;border:1px solid #2a2e39;border-radius:6px">
         <span id="ma-hint" class="muted" style="margin-left:4px"></span>
     </label>
+    <label>
+        <input type="checkbox" id="bb-toggle"> Bollinger
+    </label>
+    <label>Нижняя панель:
+        <select id="lower-panel">
+            <option value="rsi" selected>RSI</option>
+            <option value="macd">MACD</option>
+        </select>
+    </label>
     <span id="status" class="status"></span>
 </div>
 
@@ -69,8 +78,8 @@ if ($ticker === '') { header('Location: ' . url('home')); exit; }
 <div id="main-legend" class="legend"><span class="muted">Загрузка…</span></div>
 
 <div class="rsi-head">
-    <b>RSI(<?= (int)$rsiPeriod ?>)</b>
-    <span class="muted">— индикатор (не прогноз). Уровни 70 / 30 — перекупленность / перепроданность.</span>
+    <b id="lower-title">RSI(<?= (int)$rsiPeriod ?>)</b>
+    <span class="muted" id="lower-subtitle">— индикатор (не прогноз). Уровни 70 / 30 — перекупленность / перепроданность.</span>
 </div>
 <div id="rsi-chart" class="rsi-chart"></div>
 <div id="rsi-legend" class="legend"><span class="muted">Загрузка…</span></div>
@@ -86,6 +95,7 @@ const TICKER = <?= json_encode($ticker) ?>;
 const RSI_PERIOD = <?= (int)$rsiPeriod ?>;
 const RSI_COLOR = '#ba68c8';
 const MA_COLOR  = '#ffd54f';
+const BB_COLOR  = '#64b5f6';
 
 const chartEl    = document.getElementById('chart');
 const rsiChartEl = document.getElementById('rsi-chart');
@@ -138,7 +148,10 @@ try {
 
 let forecastSeries = [];
 let maSeries = null;
-const legendState = { price: 0, lines: [], ma: null, rsi: 0 };
+let bbSeries = [];
+let macdSeries = [];
+
+const legendState = { price: 0, lines: [], ma: null, bb: null, lower: 0 };
 
 function renderLegend(items) {
     return items.map(i =>
@@ -160,15 +173,19 @@ function rebuildLegend() {
     });
     if (legendState.ma) {
         items.push({
-            color: legendState.ma.color,
-            name: legendState.ma.name,
-            points: legendState.ma.points,
-            dimmed: !legendState.ma.points,
+            color: legendState.ma.color, name: legendState.ma.name,
+            points: legendState.ma.points, dimmed: !legendState.ma.points,
+        });
+    }
+    if (legendState.bb) {
+        items.push({
+            color: legendState.bb.color, name: legendState.bb.name,
+            points: legendState.bb.points, dimmed: !legendState.bb.points,
         });
     }
     document.getElementById('main-legend').innerHTML = renderLegend(items);
     document.getElementById('rsi-legend').innerHTML = renderLegend([
-        { color: RSI_COLOR, name: 'RSI(' + RSI_PERIOD + ')', points: legendState.rsi, dimmed: !legendState.rsi },
+        { color: RSI_COLOR, name: 'Нижняя панель', points: legendState.lower, dimmed: !legendState.lower },
     ]);
 }
 
@@ -187,15 +204,6 @@ async function loadAll() {
         statusEl.textContent = 'Ошибка загрузки цен: ' + e.message;
         return;
     }
-
-    try {
-        const url = `index.php?r=api-rsi&market=${encodeURIComponent(MARKET)}&ticker=${encodeURIComponent(TICKER)}&days=${days}&period=${RSI_PERIOD}&granularity=${g}`;
-        const r = await fetch(url); const j = await r.json();
-        if (j.ok) {
-            rsiSeries.setData(j.data || []);
-            legendState.rsi = (j.data || []).length;
-        }
-    } catch (e) { console.warn('rsi:', e); }
 
     forecastSeries.forEach(s => chart.removeSeries(s));
     forecastSeries = [];
@@ -226,6 +234,8 @@ async function loadAll() {
     } catch (e) { console.warn('forecast:', e); }
 
     await loadMA();
+    await loadBollinger();
+    await loadLowerPanel();
     rebuildLegend();
     chart.timeScale().fitContent();
     rsiChart.timeScale().fitContent();
@@ -266,6 +276,97 @@ async function loadMA() {
         legendState.ma = { color: MA_COLOR, name: name, points: pts.length };
         rebuildLegend();
     } catch (e) { console.warn('ma:', e); }
+}
+
+async function loadBollinger() {
+    const on = document.getElementById('bb-toggle').checked;
+    bbSeries.forEach(s => chart.removeSeries(s));
+    bbSeries = [];
+    legendState.bb = null;
+    if (!on) { rebuildLegend(); return; }
+
+    const days = document.getElementById('period').value;
+    const g    = document.getElementById('granularity').value;
+    const period = 20, mult = 2.0;
+
+    try {
+        const url = `index.php?r=api-bollinger&market=${encodeURIComponent(MARKET)}&ticker=${encodeURIComponent(TICKER)}&days=${days}&period=${period}&mult=${mult}&granularity=${g}`;
+        const r = await fetch(url); const j = await r.json();
+        if (!j.ok) return;
+        const d = j.data || {};
+        const mk = (data, color, title, dash) => {
+            if (!data || !data.length) return;
+            const s = chart.addLineSeries({
+                color, lineWidth: 1, title, priceScaleId: 'left',
+                priceLineVisible: false, lastValueVisible: false,
+                lineStyle: dash ? LightweightCharts.LineStyle.Dashed : LightweightCharts.LineStyle.Solid,
+            });
+            s.setData(data);
+            bbSeries.push(s);
+        };
+        mk(d.upper, BB_COLOR, 'BB upper', true);
+        mk(d.sma,   '#ffffff', 'BB mid', false);
+        mk(d.lower, BB_COLOR, 'BB lower', true);
+        if (d.sma && d.sma.length) {
+            legendState.bb = { color: BB_COLOR, name: 'Bollinger(' + period + ',' + mult + ')', points: d.sma.length };
+        }
+        rebuildLegend();
+    } catch (e) { console.warn('bb:', e); }
+}
+
+async function loadLowerPanel() {
+    const panel = document.getElementById('lower-panel').value;
+    const days = document.getElementById('period').value;
+    const g    = document.getElementById('granularity').value;
+
+    macdSeries.forEach(s => rsiChart.removeSeries(s));
+    macdSeries = [];
+    rsiSeries.setData([]);
+    legendState.lower = 0;
+
+    if (panel === 'rsi') {
+        document.getElementById('lower-title').textContent = 'RSI(' + RSI_PERIOD + ')';
+        document.getElementById('lower-subtitle').textContent = '— индикатор (не прогноз). Уровни 70 / 30 — перекупленность / перепроданность.';
+        try {
+            const url = `index.php?r=api-rsi&market=${encodeURIComponent(MARKET)}&ticker=${encodeURIComponent(TICKER)}&days=${days}&period=${RSI_PERIOD}&granularity=${g}`;
+            const r = await fetch(url); const j = await r.json();
+            if (j.ok) {
+                rsiSeries.setData(j.data || []);
+                legendState.lower = (j.data || []).length;
+            }
+        } catch (e) { console.warn('rsi:', e); }
+    } else {
+        document.getElementById('lower-title').textContent = 'MACD(12,26,9)';
+        document.getElementById('lower-subtitle').textContent = '— разница EMA(12) и EMA(26), сглаженная EMA(9). Гистограмма — MACD − Signal.';
+        try {
+            const url = `index.php?r=api-macd&market=${encodeURIComponent(MARKET)}&ticker=${encodeURIComponent(TICKER)}&days=${days}&granularity=${g}`;
+            const r = await fetch(url); const j = await r.json();
+            if (j.ok && j.data) {
+                const d = j.data;
+                const macdLine = rsiChart.addLineSeries({ color: '#42a5f5', lineWidth: 1, title: 'MACD' });
+                macdLine.setData(d.macd || []);
+                macdSeries.push(macdLine);
+                const sigLine = rsiChart.addLineSeries({ color: '#ffa726', lineWidth: 1, title: 'Signal' });
+                sigLine.setData(d.signal || []);
+                macdSeries.push(sigLine);
+                if (d.histogram && d.histogram.length) {
+                    const hist = rsiChart.addHistogramSeries({
+                        color: '#26a69a',
+                        priceFormat: { type: 'volume' },
+                        priceScaleId: 'right',
+                    });
+                    hist.setData(d.histogram.map(p => ({
+                        time: p.time,
+                        value: p.value,
+                        color: p.value >= 0 ? '#26a69a' : '#ef5350',
+                    })));
+                    macdSeries.push(hist);
+                }
+                legendState.lower = (d.macd || []).length;
+            }
+        } catch (e) { console.warn('macd:', e); }
+    }
+    rebuildLegend();
 }
 
 async function loadVerification() {
@@ -319,6 +420,8 @@ function renderVerification(lines) {
 document.getElementById('period').addEventListener('change', loadAll);
 document.getElementById('granularity').addEventListener('change', loadAll);
 document.getElementById('ma-type').addEventListener('change', loadMA);
+document.getElementById('bb-toggle').addEventListener('change', loadBollinger);
+document.getElementById('lower-panel').addEventListener('change', loadLowerPanel);
 
 let maDebounce = null;
 document.getElementById('ma-period').addEventListener('input', function () {
