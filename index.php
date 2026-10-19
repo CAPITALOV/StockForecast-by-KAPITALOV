@@ -516,6 +516,15 @@ switch ($route) {
         include __DIR__ . '/pages/admin.php';
         break;
 
+    // ---------- Настройки отображения ----------
+    case 'admin-settings':
+        require_admin();
+        $type = ($_POST['chart_type'] ?? 'line') === 'candles' ? 'candles' : 'line';
+        set_setting('chart_type', $type);
+        flash('Настройки сохранены');
+        header('Location: ' . url('admin'));
+        break;
+
     case 'admin-upload':
         require_admin();
         $market     = $_POST['market'] ?? '';
@@ -593,6 +602,7 @@ switch ($route) {
         @unlink(__DIR__ . '/data/recent_hits_cache.json');
         @unlink(__DIR__ . '/data/moex_shares.json');
         @unlink(__DIR__ . '/data/accuracy_cache.json');
+        @unlink(__DIR__ . '/data/news_cache.json');
         db()->exec("UPDATE stock_map SET history_skip_until = NULL WHERE history_skip_until IS NOT NULL");
         flash('Кэш очищен, пропуски сброшены');
         header('Location: ' . url('admin'));
