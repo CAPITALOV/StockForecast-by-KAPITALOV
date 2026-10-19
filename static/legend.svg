@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="480" viewBox="0 0 820 480" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif">
+  <rect width="820" height="480" fill="#131722"/>
+
+  <!-- Заголовок -->
+  <text x="40" y="50" font-size="24" font-weight="700" fill="#e6e6e6">StockForecast — легенда</text>
+  <text x="40" y="76" font-size="13" fill="#888">Цвета линий, индикаторов и статусов</text>
+
+  <!-- ==================== Блок 1: Цена и прогнозы ==================== -->
+  <text x="40" y="120" font-size="15" font-weight="600" fill="#d1d4dc">График цены</text>
+
+  <!-- Факт -->
+  <line x1="40" y1="150" x2="90" y2="150" stroke="#26a69a" stroke-width="3"/>
+  <text x="105" y="155" font-size="14" fill="#e6e6e6">Факт (close)</text>
+
+  <!-- Прогноз 1 -->
+  <line x1="40" y1="180" x2="90" y2="180" stroke="#ef5350" stroke-width="3" stroke-dasharray="6,4"/>
+  <text x="105" y="185" font-size="14" fill="#e6e6e6">Прогноз 1 — цена</text>
+
+  <!-- Прогноз 2 -->
+  <line x1="40" y1="210" x2="90" y2="210" stroke="#42a5f5" stroke-width="3" stroke-dasharray="6,4"/>
+  <text x="105" y="215" font-size="14" fill="#e6e6e6">Прогноз 2 — RSI+цена</text>
+
+  <!-- Прогноз 3 -->
+  <line x1="40" y1="240" x2="90" y2="240" stroke="#ffa726" stroke-width="3" stroke-dasharray="2,3"/>
+  <text x="105" y="245" font-size="14" fill="#e6e6e6">Прогноз 3 — усреднение</text>
+
+  <!-- SMA/EMA -->
+  <line x1="40" y1="270" x2="90" y2="270" stroke="#ffd54f" stroke-width="3"/>
+  <text x="105" y="275" font-size="14" fill="#e6e6e6">SMA / EMA</text>
+
+  <!-- Bollinger -->
+  <line x1="40" y1="300" x2="90" y2="300" stroke="#64b5f6" stroke-width="2" stroke-dasharray="4,4"/>
+  <text x="105" y="305" font-size="14" fill="#e6e6e6">Bollinger (верх / низ)</text>
+
+  <line x1="40" y1="326" x2="90" y2="326" stroke="#ffffff" stroke-width="2"/>
+  <text x="105" y="331" font-size="14" fill="#e6e6e6">Bollinger (средняя)</text>
+
+  <!-- ==================== Блок 2: Нижняя панель ==================== -->
+  <text x="440" y="120" font-size="15" font-weight="600" fill="#d1d4dc">Нижняя панель</text>
+
+  <!-- RSI -->
+  <line x1="440" y1="150" x2="490" y2="150" stroke="#ba68c8" stroke-width="3"/>
+  <text x="505" y="155" font-size="14" fill="#e6e6e6">RSI(14)</text>
+
+  <!-- RSI уровни -->
+  <line x1="440" y1="180" x2="490" y2="180" stroke="#ef5350" stroke-width="2" stroke-dasharray="4,4"/>
+  <text x="505" y="185" font-size="14" fill="#e6e6e6">RSI уровень 70</text>
+
+  <line x1="440" y1="210" x2="490" y2="210" stroke="#26a69a" stroke-width="2" stroke-dasharray="4,4"/>
+  <text x="505" y="215" font-size="14" fill="#e6e6e6">RSI уровень 30</text>
+
+  <!-- MACD -->
+  <line x1="440" y1="240" x2="490" y2="240" stroke="#42a5f5" stroke-width="2"/>
+  <text x="505" y="245" font-size="14" fill="#e6e6e6">MACD line</text>
+
+  <line x1="440" y1="270" x2="490" y2="270" stroke="#ffa726" stroke-width="2"/>
+  <text x="505" y="275" font-size="14" fill="#e6e6e6">Signal line</text>
+
+  <rect x="440" y="288" width="50" height="10" fill="#26a69a"/>
+  <text x="505" y="298" font-size="14" fill="#e6e6e6">Histogram (рост)</text>
+
+  <rect x="440" y="308" width="50" height="10" fill="#ef5350"/>
+  <text x="505" y="318" font-size="14" fill="#e6e6e6">Histogram (падение)</text>
+
+  <!-- ==================== Блок 3: Статусы ==================== -->
+  <text x="40" y="380" font-size="15" font-weight="600" fill="#d1d4dc">Статусы верификации</text>
+
+  <rect x="40" y="398" width="14" height="14" fill="#26a69a"/>
+  <text x="65" y="410" font-size="14" fill="#e6e6e6">сбылся</text>
+  <text x="145" y="410" font-size="13" fill="#888">|отклонение| ≤ 2%</text>
+
+  <rect x="280" y="398" width="14" height="14" fill="#ffa726"/>
+  <text x="305" y="410" font-size="14" fill="#e6e6e6">частично</text>
+  <text x="390" y="410" font-size="13" fill="#888">2% &lt; |отклонение| ≤ 5%</text>
+
+  <rect x="620" y="398" width="14" height="14" fill="#ef5350"/>
+  <text x="645" y="410" font-size="14" fill="#e6e6e6">не сбылся</text>
+  <text x="740" y="410" font-size="13" fill="#888">|отклонение| &gt; 5%</text>
+
+  <!-- Подвал -->
+  <text x="40" y="460" font-size="12" fill="#666">github.com/CAPITALOV/StockForecast</text>
+</svg>
