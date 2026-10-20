@@ -14,7 +14,7 @@ We actively maintain and provide security updates for the following versions of 
 If you discover a security vulnerability in StockForecast, please **do not** create a public GitHub issue. Instead, report it privately so we can address it before it is disclosed.
 
 **How to report:**
-- Send an email to **security@kapitalov.org** (or the contact email associated with this repository).
+- Send an email to **security@sotis.org** (or the contact email associated with this repository).
 - Include a detailed description of the vulnerability, steps to reproduce, and any potential impact you have identified.
 
 **What to expect:**
