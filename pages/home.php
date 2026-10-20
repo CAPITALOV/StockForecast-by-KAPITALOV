@@ -17,22 +17,26 @@ try {
     $pdo = db();
     $forecastCount = (int)$pdo->query("SELECT COUNT(*) FROM forecast_lines")->fetchColumn();
     $stockMapCount = (int)$pdo->query("SELECT COUNT(*) FROM stock_map")->fetchColumn();
-} catch (Throwable $e) {}
+    // Получаем 3 последних анонса
+    $announcements = $pdo->query("SELECT title, content, created_at FROM announcements ORDER BY created_at DESC LIMIT 3")->fetchAll();
+} catch (Throwable $e) {
+    $announcements = [];
+}
 ?>
 <!doctype html>
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<title>StockForecast — Прогнозы KAPITALOV и верификация акций MOEX и US</title>
+<title>StockForecast — прогнозы и верификация акций MOEX и US</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Проект сайта для размещения и публикации прогнозов созданных компанией KAPITALOV для прогнозирования движения трендов акций, индексов, эмитентов для дальнейшей торговой стратегии.">
+<meta name="description" content="Три линии прогноза на каждый тикер MOEX и US, автоматическая верификация по истории цен и расчёт точности.">
 <link rel="stylesheet" href="static/style.css">
 </head>
 <body>
 <header class="topbar">
-    <a class="logo" href="index.php">📈 StockForecast <small style="font-size:12px;color:#888;font-weight:400;margin-left:4px">by KAPITALOV</small></a>
+    <a class="logo" href="index.php">📈 StockForecast</a>
     <nav>
-        <a href="#features">Что внутри</a>
+        <a href="#features">Возможности</a>
         <a href="#how">Как это работает</a>
         <a href="#stocks">Акции</a>
         <a href="index.php?r=screener">Screener</a>
@@ -51,9 +55,6 @@ try {
     <span class="eyebrow">Прогнозы · Верификация · Точность</span>
     <h1>Прогнозы акций <span class="accent">и их честная верификация</span></h1>
     <p class="lead">
-        Проект сайта для размещения и публикации прогнозов созданных компанией <b>KAPITALOV</b>
-        для прогнозирования движения трендов акций, индексов и эмитентов для дальнейшей торговой стратегии.
-        <br><br>
         Три независимые линии прогноза на каждый тикер. Автоматическое сравнение
         с фактической историей цен MOEX ISS и Yahoo Finance. Прозрачный расчёт
         точности — без «подгонки» задним числом.
@@ -72,82 +73,42 @@ try {
     </div>
 </section>
 
-<section class="section" id="recent-hits-section" style="display:none">
+<!-- ================= НОВОСТИ И АНОНСЫ ================= -->
+<?php if (!empty($announcements)): ?>
+<section class="section" id="news-section">
     <div class="section-head">
-        <h2>Свежие попадания</h2>
-        <p>Прогнозы за последние 7 дней, где отклонение от факта не превышает 2%.</p>
+        <h2>Новости проекта</h2>
+        <p>Что нового мы внедрили и что планируем в ближайшее время.</p>
     </div>
-    <div id="recent-hits-table"></div>
+    <div class="cards" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));">
+        <?php foreach ($announcements as $a): ?>
+            <div class="card feature-card">
+                <div class="muted" style="font-size: 12px; margin-bottom: 8px;">
+                    <?= date('d.m.Y', strtotime($a['created_at'])) ?>
+                </div>
+                <h3 style="margin-top: 0; color: var(--accent);"><?= h($a['title']) ?></h3>
+                <p style="color: #a0a8b4; font-size: 14px; line-height: 1.6;">
+                    <?= nl2br(h($a['content'])) ?>
+                </p>
+            </div>
+        <?php endforeach; ?>
+    </div>
 </section>
-<script>
-(function () {
-    const section = document.getElementById('recent-hits-section');
-    const box = document.getElementById('recent-hits-table');
-    fetch('index.php?r=api-recent-hits&days=7&max_dev=2&limit=8', { cache: 'no-store' })
-        .then(r => r.json())
-        .then(j => {
-            if (!j.ok || !j.hits || !j.hits.length) return;
-            let html = '<table class="stock-table"><thead><tr>' +
-                '<th>Дата</th><th>Биржа</th><th>Тикер</th><th>Линия</th>' +
-                '<th>Прогноз</th><th>Факт</th><th>Δ %</th>' +
-                '</tr></thead><tbody>';
-            for (const h of j.hits) {
-                const link = 'index.php?r=stock&market=' + encodeURIComponent(h.market)
-                           + '&ticker=' + encodeURIComponent(h.ticker);
-                html += '<tr>' +
-                    '<td>' + h.time + '</td>' +
-                    '<td>' + h.market.toUpperCase() + '</td>' +
-                    '<td><a href="' + link + '" style="color:#26a69a;text-decoration:none"><b>' + h.ticker + '</b></a></td>' +
-                    '<td>Л' + h.line_num + '</td>' +
-                    '<td>' + h.forecast + '</td>' +
-                    '<td>' + h.fact + '</td>' +
-                    '<td class="status-ok">' + h.deviation_pct + '%</td>' +
-                    '</tr>';
-            }
-            html += '</tbody></table>';
-            box.innerHTML = html;
-            section.style.display = '';
-        })
-        .catch(e => {});
-})();
-</script>
+<?php endif; ?>
 
+<!-- ... (Остальные секции: Свежие попадания, Возможности, Как работает, Акции) ... -->
 <section id="features" class="section">
     <div class="section-head">
         <h2>Что внутри</h2>
         <p>Полный цикл: от загрузки CSV из Yii до графика с отклонением по каждой точке.</p>
     </div>
     <div class="cards">
-        <article class="card feature-card">
-            <div class="card-icon">01</div>
-            <h3>Три линии прогноза</h3>
-            <p>До трёх независимых прогнозов на тикер (цена или дельта). Разные модели, одна шкала времени.</p>
-        </article>
-        <article class="card feature-card">
-            <div class="card-icon">02</div>
-            <h3>Импорт из Yii</h3>
-            <p>CSV <code>Id, StockId, Date, Delta</code> автоматически разложится по тикерам через справочник.</p>
-        </article>
-        <article class="card feature-card">
-            <div class="card-icon">03</div>
-            <h3>MOEX + US</h3>
-            <p>Официальный ISS API Мосбиржи и Yahoo Finance (со Stooq-фолбэком) — без ключей.</p>
-        </article>
-        <article class="card feature-card">
-            <div class="card-icon">04</div>
-            <h3>Фиксация истории</h3>
-            <p>Котировки кэшируются в <code>history_bars</code> — верификация не зависит от источника.</p>
-        </article>
-        <article class="card feature-card">
-            <div class="card-icon">05</div>
-            <h3>Верификация</h3>
-            <p>Сравнение прогноза с фактом: отклонение в %, статус «сбылся / частично / не сбылся».</p>
-        </article>
-        <article class="card feature-card">
-            <div class="card-icon">06</div>
-            <h3>Метрики точности</h3>
-            <p>MAPE и hit-rate по тикеру, бирже и линии. Экспорт в CSV. Сравнение нескольких тикеров.</p>
-        </article>
+        <article class="card feature-card"><div class="card-icon">01</div><h3>Три линии прогноза</h3><p>До трёх независимых прогнозов на тикер (цена или дельта). Разные модели, одна шкала времени.</p></article>
+        <article class="card feature-card"><div class="card-icon">02</div><h3>Импорт из Yii</h3><p>CSV <code>Id, StockId, Date, Delta</code> автоматически разложится по тикерам через справочник.</p></article>
+        <article class="card feature-card"><div class="card-icon">03</div><h3>MOEX + US</h3><p>Официальный ISS API Мосбиржи и Yahoo Finance (со Stooq-фолбэком) — без ключей.</p></article>
+        <article class="card feature-card"><div class="card-icon">04</div><h3>Фиксация истории</h3><p>Котировки кэшируются в <code>history_bars</code> — верификация не зависит от источника.</p></article>
+        <article class="card feature-card"><div class="card-icon">05</div><h3>Верификация</h3><p>Сравнение прогноза с фактом: отклонение в %, статус «сбылся / частично / не сбылся».</p></article>
+        <article class="card feature-card"><div class="card-icon">06</div><h3>Метрики точности</h3><p>MAPE и hit-rate по тикеру, бирже и линии. Экспорт в CSV и PNG. Сравнение нескольких тикеров.</p></article>
     </div>
 </section>
 
@@ -157,22 +118,10 @@ try {
         <p>Четыре шага — от CSV до отчёта по точности.</p>
     </div>
     <ol class="steps">
-        <li>
-            <h3>Загрузите справочник</h3>
-            <p>CSV <code>cap_stock.csv</code> из Yii строит маппинг <code>StockId → тикер</code>.</p>
-        </li>
-        <li>
-            <h3>Загрузите прогнозы</h3>
-            <p>CSV раскладывается по тикерам на 1–3 линии.</p>
-        </li>
-        <li>
-            <h3>Откройте график</h3>
-            <p>Цена + линии прогноза, RSI, детализация день/неделя/месяц.</p>
-        </li>
-        <li>
-            <h3>Смотрите верификацию</h3>
-            <p>По каждой точке — прогноз, факт, отклонение и статус. CSV на экспорт.</p>
-        </li>
+        <li><h3>Загрузите справочник</h3><p>CSV <code>cap_stock.csv</code> из Yii строит маппинг <code>StockId → тикер</code>.</p></li>
+        <li><h3>Загрузите прогнозы</h3><p>CSV раскладывается по тикерам на 1–3 линии.</p></li>
+        <li><h3>Откройте график</h3><p>Цена + линии прогноза, RSI, MACD, Bollinger, детализация день/неделя/месяц.</p></li>
+        <li><h3>Смотрите верификацию</h3><p>По каждой точке — прогноз, факт, отклонение и статус. CSV и PNG на экспорт.</p></li>
     </ol>
 </section>
 
@@ -209,11 +158,44 @@ try {
 </section>
 </main>
 <footer>
-    © 2025 KAPITALOV · StockForecast ·
+    © StockForecast ·
     <a href="index.php?r=screener" style="color:#26a69a;text-decoration:none">Screener</a> ·
     <a href="index.php?r=accuracy" style="color:#26a69a;text-decoration:none">Точность</a> ·
     <a href="index.php?r=compare" style="color:#26a69a;text-decoration:none">Сравнить</a> ·
     <a href="<?= is_admin() ? url('admin') : url('admin-login') ?>" style="color:#26a69a;text-decoration:none">Админка</a>
 </footer>
+<script>
+(function () {
+    const section = document.getElementById('recent-hits-section');
+    const box = document.getElementById('recent-hits-table');
+    if (!section || !box) return; // если блока нет, выходим
+    fetch('index.php?r=api-recent-hits&days=7&max_dev=2&limit=8', { cache: 'no-store' })
+        .then(r => r.json())
+        .then(j => {
+            if (!j.ok || !j.hits || !j.hits.length) return;
+            let html = '<table class="stock-table"><thead><tr>' +
+                '<th>Дата</th><th>Биржа</th><th>Тикер</th><th>Линия</th>' +
+                '<th>Прогноз</th><th>Факт</th><th>Δ %</th>' +
+                '</tr></thead><tbody>';
+            for (const h of j.hits) {
+                const link = 'index.php?r=stock&market=' + encodeURIComponent(h.market)
+                           + '&ticker=' + encodeURIComponent(h.ticker);
+                html += '<tr>' +
+                    '<td>' + h.time + '</td>' +
+                    '<td>' + h.market.toUpperCase() + '</td>' +
+                    '<td><a href="' + link + '" style="color:#26a69a;text-decoration:none"><b>' + h.ticker + '</b></a></td>' +
+                    '<td>Л' + h.line_num + '</td>' +
+                    '<td>' + h.forecast + '</td>' +
+                    '<td>' + h.fact + '</td>' +
+                    '<td class="status-ok">' + h.deviation_pct + '%</td>' +
+                    '</tr>';
+            }
+            html += '</tbody></table>';
+            box.innerHTML = html;
+            section.style.display = '';
+        })
+        .catch(e => {});
+})();
+</script>
 </body>
 </html>
