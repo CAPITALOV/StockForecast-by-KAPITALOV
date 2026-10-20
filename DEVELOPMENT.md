@@ -1,457 +1,253 @@
-# \# DEVELOPMENT — руководство разработчика
+# DEVELOPMENT — руководство разработчика
 
-# 
+Документ для того, кто продолжит развивать проект (в том числе AI-ассистент).
+Цель — понимать архитектуру без чтения всего кода.
 
-# Документ для того, кто продолжит развивать проект (в том числе AI-ассистент).
+---
 
-# Цель — понимать архитектуру без чтения всего кода.
+## 1. Архитектура
 
-# 
+### Поток запроса
 
-# Легенда: \*\*⚠️\*\* — требует сверки с фактическим кодом/БД.
+1. Все запросы идут через `index.php` (front controller).
+2. Роутинг по параметру `?r=...`:
+   - `home` (по умолчанию) → `pages/home.php`
+   - `stock` → `pages/stock.php`
+   - `news` → `pages/news.php`
+   - `screener` → `pages/screener.php`
+   - `accuracy` → `pages/accuracy.php`
+   - `compare` → `pages/compare.php`
+   - `admin` / `admin-login` / `admin-settings` → `pages/admin*.php`
+3. API-запросы (`?r=api-*`) обрабатываются в `index.php` и отдают JSON.
+4. Миграции — `bootstrap.php`. Фоновые задачи — `cron/`.
+5. Конфиг — `config.php` (копируется из `config.example.php`).
 
-# 
+### Структура каталогов
 
-# \---
-
-# 
-
-# \## 1. Архитектура
-
-# 
-
-# \### Поток запроса
-
-# 
-
-# 1\. Все запросы идут через `index.php` (front controller).
-
-# 2\. Роутинг по параметру `?r=...`:
-
-# &#x20;  - `home` (по умолчанию) → `pages/home.php`
-
-# &#x20;  - `stock` → `pages/stock.php`
-
-# &#x20;  - `news` → `pages/news.php`
-
-# &#x20;  - `screener` → `pages/screener.php`
-
-# &#x20;  - `accuracy` → `pages/accuracy.php`
-
-# &#x20;  - `compare` → `pages/compare.php`
-
-# &#x20;  - `admin` / `admin-login` → `pages/admin\\\*.php`
-
-# 3\. API-запросы (`?r=api-\\\*`) обрабатываются в `index.php` и отдают JSON.
-
-# 4\. Общие функции: `lib/` (хелперы, БД, настройки, новости, верификация).
-
-# 
-
-# \### Структура каталогов
-
+```
 /
-
-├── index.php # front controller + роутинг + API
-
-├── pages/ # страницы (home, stock, news, screener, accuracy, compare, admin)
-
-├── lib/ # библиотеки
-
-│ ├── db.php # подключение к БД ⚠️ уточнить имя
-
-│ ├── settings.php # get\_setting() / set\_setting() ⚠️ уточнить имя
-
-│ ├── news.php # get\_financial\_news()
-
-│ ├── verify.php # forecast\_to\_price(), verify\_forecast() ⚠️ создать
-
-│ └── helpers.php # h(), url(), is\_admin() ⚠️ уточнить имя
-
+├── index.php              # front controller + роутинг + API
+├── bootstrap.php          # миграции БД (history_bars, settings, announcements.image)
+├── config.php             # конфиг (DB, Telegram, API-ключи) — не в git
+├── config.example.php     # шаблон конфига
+├── pages/                 # home, stock, news, screener, accuracy, compare, admin*
+├── lib/
+│   ├── api.php            # загрузка истории (MOEX ISS, Yahoo, Stooq)
+│   ├── verify.php         # forecast_to_price(), verify_forecast() (cumprod)
+│   ├── screener.php       # screener_data()
+│   ├── news.php           # get_financial_news()
+│   ├── settings.php       # get_setting() / set_setting()
+│   └── helpers.php        # h(), url(), is_admin()
+├── cron/                  # бэкфилл истории, проверка попаданий
 ├── static/
-
-│ ├── style.css
-
-│ └── theme.js
-
-├── data/ # кэш / сырые данные (если есть) ⚠️
-
+│   ├── style.css
+│   ├── theme.js
+│   ├── legend.svg
+│   └── uploads/           # картинки к анонсам (.gitignore)
+├── data/                  # кэши (news_cache.json и т.п.), права 775
 ├── VERSION
-
 ├── CHANGELOG.md
+├── DEVELOPMENT.md
+├── PROJECT_HISTORY.md
+├── SECURITY.md
+└── README.md
+```
 
-└── DEVELOPMENT.md
+### Стек
 
+- **Backend:** PHP 7.4+ (без фреймворка), PDO/MySQL 5.7+ / MariaDB 10.3+.
+- **Расширения PHP:** `pdo_mysql`, `mbstring`, `curl`, `fileinfo`.
+- **Frontend:** чистый JS + [lightweight-charts 4.1.0](https://github.com/tradingview/lightweight-charts) (CDN: unpkg).
+- **Интеграции:** MOEX ISS API, Yahoo Finance (FreeNewsApi.ai + Stooq), Telegram Bot API, RSS (ПРАЙМ, Банки.ру).
+- **Графики:** line / candlestick, RSI(14), MACD, Bollinger, SMA/EMA, прогнозные линии.
+- **Экспорт:** CSV (server-side), PNG (client-side через `takeScreenshot()`).
 
+---
 
-\### Стек
-
-
-
-\- \*\*Backend:\*\* PHP 8.x (без фреймворка), PDO/MySQL ⚠️ уточнить.
-
-\- \*\*Frontend:\*\* чистый JS + \[lightweight-charts 4.1.0](https://github.com/tradingview/lightweight-charts) (CDN: unpkg).
-
-\- \*\*Графики:\*\* line / candlestick, RSI, MACD, Bollinger, MA (SMA/EMA), прогнозные линии.
-
-\- \*\*Экспорт:\*\* CSV (server-side), PNG (client-side через `takeScreenshot()`).
-
-
-
-\---
-
-
-
-\## 2. API-эндпоинты
-
-
+## 2. API-эндпоинты
 
 Все API возвращают JSON вида `{ ok: true, ... }` или `{ ok: false, error: "..." }`.
 
-
-
 | Роут | Параметры | Назначение |
-
 |---|---|---|
-
-| `api-history` | `market`, `ticker`, `days`, `granularity` | OHLCV / close для основного графика |
-
-| `api-forecast` | `market`, `ticker`, `granularity` | Прогнозные линии (`lines\\\[]`) |
-
+| `api-history` | `market`, `ticker`, `days`, `granularity` | OHLCV / close (`history_bars`) |
+| `api-forecast` | `market`, `ticker`, `granularity` | Прогнозные линии (`lines[]`) |
 | `api-ma` | `market`, `ticker`, `days`, `period`, `type`, `granularity` | SMA / EMA |
-
 | `api-bollinger` | `market`, `ticker`, `days`, `period`, `mult`, `granularity` | Bollinger Bands |
-
 | `api-rsi` | `market`, `ticker`, `days`, `period`, `granularity` | RSI |
-
 | `api-macd` | `market`, `ticker`, `days`, `granularity` | MACD + Signal + Histogram |
-
 | `api-verify` | `market`, `ticker` | Верификация прогнозов (см. §4) |
-
 | `export-verify` | `market`, `ticker` | CSV с верификацией |
+| `admin-settings` | POST | Тип графика по умолчанию и др. |
 
-
-
-\*\*Формат прогнозной линии:\*\*
-
-
+**Формат прогнозной линии:**
 
 ```json
-
 {
-
-\&#x20; "line\\\_num": 1,
-
-\&#x20; "name": "Прогноз 1",
-
-\&#x20; "color": "#ef5350",
-
-\&#x20; "value\\\_type": "price",
-
-\&#x20; "computed": false,
-
-\&#x20; "data": \\\[{ "time": "2026-10-01", "value": 123.45 }]
-
+  "line_num": 1,
+  "name": "Прогноз 1",
+  "color": "#ef5350",
+  "value_type": "price",
+  "computed": false,
+  "data": [{ "time": "2026-10-01", "value": 123.45 }]
 }
+```
 
+- `value_type === "price"` → левая ось.
+- `value_type === "delta"` → правая ось.
 
+---
 
-value\\\_type === "price" → левая ось.
+## 3. Семантика `delta` (зафиксирована)
 
+**Вариант A — относительная дельта с восстановлением через cumprod** (реализовано с v1.2).
 
+- Прогноз хранится как **относительное изменение**:
+  ```
+  delta_t = p_t / p_{t-1} - 1
+  ```
+- Восстановление цены из `delta` — накопленное произведение (cumprod):
+  ```
+  p_t = p_0 * ∏_{i=1}^{t} (1 + delta_i)
+  ```
+- `p_0` — последняя фактическая цена на дату начала прогноза.
 
-value\\\_type === "delta" → правая ось.
+Реализация — в `lib/verify.php` (`forecast_to_price()`). Эта семантика используется и в верификации, и для отображения `delta`-линий на правой оси.
 
+---
 
+## 4. Верификация прогнозов (реализована)
 
-3\\. Семантика delta ⚠️ зафиксировать
+### Что считается
 
-Сейчас в stock.php для delta используется правая ось, но формула не зафиксирована. Нужно выбрать и записать:
+- **MAPE** — средняя абсолютная процентная ошибка.
+- **Hit-rate** — доля точек, где |отклонение| в пределах порога «сбылся» (≤ 2%).
+- **Статус** по каждой точке:
+  - `сбылся` — |deviation| ≤ 2%
+  - `частично` — 2% < |deviation| ≤ 5%
+  - `не сбылся` — |deviation| > 5%
 
+### Схема
 
+1. `api-verify` берёт все прогнозные линии из `api-forecast`.
+2. Для каждой точки прогноза ищет фактическую цену на ту же дату в `history_bars`.
+3. Пересчитывает `delta → price` через `forecast_to_price()` (cumprod, §3).
+4. Считает `deviation_pct = (forecast - fact) / fact * 100`.
+5. Определяет `status` по порогам выше.
+6. Возвращает JSON:
 
-Вариант A (относительная): delta\\\_t = p\\\_t / p\\\_{t-1} - 1 (в % или долях).
-
-
-
-Вариант B (абсолютная): delta\\\_t = p\\\_t - p\\\_{t-1} (в валюте).
-
-
-
-От этого зависит forecast\\\_to\\\_price() в lib/verify.php:
-
-
-
-// Вариант A
-
-$price = $base \\\* (1 + $delta);
-
-// Вариант B
-
-$price = $base + $delta;
-
-Решение: ⚠️ записать выбранный вариант здесь и продублировать в CHANGELOG.md.
-
-
-
-4\\. Верификация прогнозов
-
-Цель
-
-Сравнить прогнозные значения с фактическими ценами за прошедшие даты и посчитать:
-
-
-
-MAPE — средняя абсолютная процентная ошибка.
-
-
-
-Hit-rate — доля точек, где отклонение в пределах порога.
-
-
-
-Статус по каждой точке: сбылся / не сбылся / —.
-
-
-
-Схема
-
-api-verify берёт все прогнозные линии из api-forecast.
-
-
-
-Для каждой точки прогноза ищет фактическую цену на ту же дату в истории.
-
-
-
-Пересчитывает delta → price (если нужно) через forecast\\\_to\\\_price().
-
-
-
-Считает deviation\\\_pct = (forecast - fact) / fact \\\* 100.
-
-
-
-Определяет status по порогу ⚠️ (например, |deviation| ≤ 5%).
-
-
-
-Возвращает:
-
+```json
 {
-
-\&#x20; "ok": true,
-
-\&#x20; "lines": \\\[{
-
-\&#x20;   "line\\\_num": 1,
-
-\&#x20;   "name": "Прогноз 1",
-
-\&#x20;   "color": "#ef5350",
-
-\&#x20;   "verify": {
-
-\&#x20;     "mape": 3.21,
-
-\&#x20;     "hit\\\_rate": 0.78,
-
-\&#x20;     "count": 42,
-
-\&#x20;     "rows": \\\[{
-
-\&#x20;       "time": "2026-09-01",
-
-\&#x20;       "forecast": 123.4,
-
-\&#x20;       "fact": 120.1,
-
-\&#x20;       "deviation\\\_pct": 2.75,
-
-\&#x20;       "status": "сбылся"
-
-\&#x20;     }]
-
-\&#x20;   }
-
-\&#x20; }]
-
+  "ok": true,
+  "lines": [{
+    "line_num": 1,
+    "name": "Прогноз 1",
+    "color": "#ef5350",
+    "verify": {
+      "mape": 3.21,
+      "hit_rate": 0.78,
+      "count": 42,
+      "rows": [{
+        "time": "2026-09-01",
+        "forecast": 123.4,
+        "fact": 120.1,
+        "deviation_pct": 2.75,
+        "status": "сбылся"
+      }]
+    }
+  }]
 }
+```
 
-Файлы
+### Файлы
 
-lib/verify.php — forecast\\\_to\\\_price(), verify\\\_forecast() ⚠️ создать.
+- `lib/verify.php` — `forecast_to_price()`, `verify_forecast()`.
+- `pages/stock.php` — `loadVerification()` / `renderVerification()`.
+- `pages/accuracy.php` — сводная страница.
+- `lib/screener.php` — `screener_data()` для screener'а.
 
+---
 
+## 5. База данных
 
-pages/stock.php — уже ожидает этот формат (loadVerification() / renderVerification()).
+- **`history_bars`** — `ticker_id`, `date`, `open`, `high`, `low`, `close`, `volume`. Уникальный `(ticker_id, date)`. Миграция — `bootstrap.php` (v1.19).
+- **`forecasts`** — `ticker_id`, `line_num`, `date`, `value`, `value_type`. Уникальный `(ticker_id, line_num, date)`.
+- **`tickers`** — `id`, `market`, `ticker`, `name`.
+- **`settings`** — `key`, `value` (v1.19; тип графика по умолчанию и др.).
+- **`announcements`** — новости/анонсы, с колонкой `image` (v1.20).
+- **`users`** — `id`, `login`, `password_hash`, `is_admin`.
 
+Кэши (не в БД): `data/news_cache.json` — новости, TTL 15 минут.
 
+---
 
-pages/accuracy.php — сводная страница по всем тикерам ⚠️ проверить.
+## 6. Frontend (`pages/stock.php`)
 
+### Основные компоненты
 
+- `LightweightCharts.createChart()` — основной график (480px) + нижняя панель (160px).
+- Синхронизация `timeScale` между графиками через `subscribeVisibleLogicalRangeChange`.
+- Тултип на `subscribeCrosshairMove` — факт, прогноз, отклонение, статус.
+- Переключатели: тип графика (линии/свечи), период, детализация, MA, Bollinger, нижняя панель (RSI/MACD).
+- `hide-lower` на `<body>` скрывает `#rsi-chart`, `#rsi-legend`, `.rsi-head`.
 
-5\\. База данных ⚠️ уточнить
+### Важные нюансы
 
-Предположительная схема (сверить с lib/db.php):
+- **`applyOptions({ width })` нельзя вызывать при `clientWidth === 0`** — иначе падение. Защита стоит в `toggle-lower` и `window.resize` (v1.20.1).
+- **`destroyCharts()` перед каждым рендером** — иначе верификация пропадает при смене типа графика (фикс v1.19).
+- `style.css?v=N` — cache-bust; при изменении CSS увеличивать `N`.
+- `localStorage.sf_chart_type` — перекрывает серверный `chart_type` из `get_setting()`.
 
+---
 
+## 7. Деплой
 
-tickers — id, market, ticker, name.
-
-
-
-prices — ticker\\\_id, date, open, high, low, close, volume.
-
-
-
-forecasts — ticker\\\_id, line\\\_num, date, value, value\\\_type.
-
-
-
-settings — key, value.
-
-
-
-users — id, login, password\\\_hash, is\\\_admin.
-
-
-
-Индексы:
-
-
-
-prices(ticker\\\_id, date) — уникальный.
-
-
-
-forecasts(ticker\\\_id, line\\\_num, date) — уникальный.
-
-
-
-6\\. Frontend (pages/stock.php)
-
-Основные компоненты
-
-LightweightCharts.createChart() — основной график (480px) + нижняя панель (160px).
-
-
-
-Синхронизация timeScale между графиками через subscribeVisibleLogicalRangeChange.
-
-
-
-Тултип на subscribeCrosshairMove — показывает факт, прогноз, отклонение, статус.
-
-
-
-Переключатели: тип графика, период, детализация, MA, Bollinger, нижняя панель (RSI/MACD).
-
-
-
-hide-lower на <body> скрывает #rsi-chart, #rsi-legend, .rsi-head.
-
-
-
-Важные нюансы
-
-applyOptions({ width }) нельзя вызывать при clientWidth === 0 — иначе падение. Защита уже стоит в toggle-lower и window.resize.
-
-
-
-style.css?v=N — cache-bust; при изменении CSS увеличивать N.
-
-
-
-localStorage.sf\\\_chart\\\_type — перекрывает серверный chart\\\_type из get\\\_setting().
-
-
-
-7\\. Деплой
-
+```bash
 cd /var/www/sotis.org/data/www/forecast.sotis.org
-
 git pull
-
-\\# миграции БД, если есть
-
-\\# очистка кэша (если есть)
+php bootstrap.php          # миграции, если есть новые
+chmod 775 data static/uploads
+# cron: см. crontab -l
+```
 
 Требования:
+- PHP 7.4+, MySQL 5.7+ / MariaDB 10.3+.
+- Расширения: `pdo_mysql`, `mbstring`, `curl`, `fileinfo`.
+- Права на `data/` и `static/uploads/` — 775, владелец = PHP-процесс.
+- SSH-ключ для `git@github.com:CAPITALOV/StockForecast-by-KAPITALOV.git`.
+- Исходящие запросы к `iss.moex.com`, `query1.finance.yahoo.com`, `stooq.com`.
 
+Ветка `main` защищена: force-push запрещён. Только fast-forward / rebase + push.
 
+---
 
-PHP 8.x, MySQL/MariaDB ⚠️ уточнить версии.
+## 8. Соглашения
 
+- **Коммиты:** Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`).
+- **Версии:** SemVer (`VERSION`, `CHANGELOG.md`, тег `vX.Y.Z`).
+- **PHP:** без фреймворка, PDO. `declare(strict_types=1)` — добавить в новые файлы.
+- **JS:** без сборки, ES2020+, глобальный `LightweightCharts`.
+- **CSS:** переменные `--bg-card`, `--text`, `--border` для тем.
 
+---
 
-Права на data/ (если используется).
+## 9. Известные задачи
 
+- [x] Зафиксировать семантику `delta` (§3, cumprod).
+- [x] Реализовать `lib/verify.php` и роут `api-verify` (§4).
+- [x] Миграция `history_bars` с OHLC (v1.19).
+- [x] Миграция `announcements.image` (v1.20).
+- [x] Исправить таймауты Yahoo/Stooq в `lib/api.php` (504).
+- [ ] `declare(strict_types=1)` во всех PHP-файлах.
+- [ ] Сверить `pages/accuracy.php` с текущим форматом `api-verify`.
+- [ ] Документировать `cron/` в §7 (расписание задач).
 
+---
 
-SSH-ключ для git@github.com:CAPITALOV/StockForecast-by-KAPITALOV.git.
+## 10. Полезные ссылки
 
-
-
-Ветка main защищена: force-push запрещён. Только fast-forward / rebase + push.
-
-
-
-8\\. Соглашения
-
-Коммиты: Conventional Commits (feat:, fix:, docs:, chore:).
-
-
-
-Версии: SemVer (VERSION, CHANGELOG.md, тег vX.Y.Z).
-
-
-
-PHP: declare(strict\\\_types=1); ⚠️ если ещё нет — добавить.
-
-
-
-JS: без сборки, ES2020+, глобальный LightweightCharts.
-
-
-
-CSS: переменные --bg-card, --text, --border для тем.
-
-
-
-9\\. Известные задачи
-
-□ Зафиксировать семантику delta (§3).
-
-□ Создать lib/verify.php и роут api-verify (§4).
-
-□ Сверить схему БД (§5).
-
-□ Добавить declare(strict\\\_types=1) во все PHP-файлы.
-
-□ Страница accuracy — сводка MAPE / hit-rate по всем тикерам.
-
-10\\. Полезные ссылки
-
-Репозиторий: https://github.com/CAPITALOV/StockForecast-by-KAPITALOV
-
-
-
-Релизы: https://github.com/CAPITALOV/StockForecast-by-KAPITALOV/releases
-
-
-
-lightweight-charts: https://tradingview.github.io/lightweight-charts/
-
-
-
-
-
-
-
-
-
-
-
-
+- Репозиторий: https://github.com/CAPITALOV/StockForecast-by-KAPITALOV
+- Релизы: https://github.com/CAPITALOV/StockForecast-by-KAPITALOV/releases
+- lightweight-charts: https://tradingview.github.io/lightweight-charts/
+- PROJECT_HISTORY.md — история вех и критических багов.
+- SECURITY.md — политика безопасности.
