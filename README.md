@@ -1,4 +1,3 @@
-cat > README.md <<'EOF'
 # StockForecast (by KAPITALOV)
 
 Проект сайта для размещения и публикации прогнозов, созданных компанией **KAPITALOV** для прогнозирования движения трендов акций, индексов и эмитентов для дальнейшей торговой стратегии.
@@ -7,7 +6,7 @@ cat > README.md <<'EOF'
 
 ---
 
-## 🎨 Легенда
+## ���� ��Легенда
 
 ![Легенда StockForecast: линии, индикаторы, статусы](static/legend.svg)
 
@@ -15,20 +14,20 @@ cat > README.md <<'EOF'
 
 ---
 
-## 📋 Требования
+## ���� ��Требования
 
-- PHP 7.4+ с расширениями `pdo_mysql`, `mbstring`, `curl`
+- PHP 7.4+ с расширениями `pdo_mysql`, `mbstring`, `curl`, `fileinfo`
 - MySQL 5.7+ / MariaDB 10.3+
 - Исходящие HTTP-запросы к `iss.moex.com`, `query1.finance.yahoo.com`, `stooq.com`
 - Для Cron: доступ к CLI
 
-## 🚀 Быстрый старт
+## ���� ��Быстрый старт
 
 ```bash
 git clone git@github.com:CAPITALOV/StockForecast-by-KAPITALOV.git
 cd StockForecast
 cp config.example.php config.php
 # отредактировать config.php (DB_HOST, DB_NAME, DB_USER, DB_PASS)
-mkdir -p data
-chmod 775 data
-# Открыть в браузере: http://ваш-домен/index.php
+mkdir -p data static/uploads
+chmod 775 data static/uploads
+# Открыть в браузере: http://forecast.sotis.org/index.php
