@@ -22,6 +22,7 @@ function gr() {
 switch ($route) {
 
     case 'api-history':
+        // ... (код без изменений) ...
         header('Content-Type: application/json');
         $market = $_GET['market'] ?? 'moex';
         $ticker = strtoupper(trim($_GET['ticker'] ?? ''));
@@ -48,6 +49,7 @@ switch ($route) {
         break;
 
     case 'api-forecast':
+        // ... (код без изменений) ...
         header('Content-Type: application/json');
         $market = $_GET['market'] ?? 'moex';
         $ticker = strtoupper(trim($_GET['ticker'] ?? ''));
@@ -104,6 +106,7 @@ switch ($route) {
         break;
 
     case 'api-tickers':
+        // ... (код без изменений) ...
         header('Content-Type: application/json');
         $market = $_GET['market'] ?? 'moex';
         $list = ($market === 'moex') ? moex_shares() : us_stocks_list();
@@ -111,6 +114,7 @@ switch ($route) {
         break;
 
     case 'api-rsi':
+        // ... (код без изменений) ...
         header('Content-Type: application/json');
         $market = $_GET['market'] ?? 'moex';
         $ticker = strtoupper(trim($_GET['ticker'] ?? ''));
@@ -137,6 +141,7 @@ switch ($route) {
         break;
 
     case 'api-ma':
+        // ... (код без изменений) ...
         header('Content-Type: application/json');
         $market = $_GET['market'] ?? 'moex';
         $ticker = strtoupper(trim($_GET['ticker'] ?? ''));
@@ -164,6 +169,7 @@ switch ($route) {
         break;
 
     case 'api-macd':
+        // ... (код без изменений) ...
         header('Content-Type: application/json');
         $market = $_GET['market'] ?? 'moex';
         $ticker = strtoupper(trim($_GET['ticker'] ?? ''));
@@ -193,6 +199,7 @@ switch ($route) {
         break;
 
     case 'api-bollinger':
+        // ... (код без изменений) ...
         header('Content-Type: application/json');
         $market = $_GET['market'] ?? 'moex';
         $ticker = strtoupper(trim($_GET['ticker'] ?? ''));
@@ -220,6 +227,7 @@ switch ($route) {
         break;
 
     case 'api-verify':
+        // ... (код без изменений) ...
         header('Content-Type: application/json');
         $market = $_GET['market'] ?? 'moex';
         $ticker = strtoupper(trim($_GET['ticker'] ?? ''));
@@ -253,6 +261,7 @@ switch ($route) {
         break;
 
     case 'api-compare':
+        // ... (код без изменений) ...
         header('Content-Type: application/json');
         $market  = $_GET['market'] ?? 'moex';
         $days    = max(30, min(18250, (int)($_GET['days'] ?? DEFAULT_DAYS)));
@@ -310,6 +319,7 @@ switch ($route) {
         break;
 
     case 'api-recent-hits':
+        // ... (код без изменений) ...
         header('Content-Type: application/json');
         @set_time_limit(12);
         $days   = max(1, min(30, (int)($_GET['days'] ?? 7)));
@@ -325,6 +335,7 @@ switch ($route) {
         break;
 
     case 'export-verify':
+        // ... (код без изменений) ...
         $market = $_GET['market'] ?? 'moex';
         $ticker = strtoupper(trim($_GET['ticker'] ?? ''));
         if ($ticker === '') { http_response_code(400); exit; }
@@ -354,6 +365,7 @@ switch ($route) {
         exit;
 
     case 'export-accuracy':
+        // ... (код без изменений) ...
         header('Content-Type: text/csv; charset=utf-8');
         header('Content-Disposition: attachment; filename="accuracy_' . date('Y-m-d') . '.csv"');
         echo "\xEF\xBB\xBF";
@@ -377,10 +389,10 @@ switch ($route) {
         exit;
 
     case 'export-screener':
+        // ... (код без изменений) ...
         $days   = max(7, min(365, (int)($_GET['days'] ?? 30)));
         $market = in_array($_GET['market'] ?? '', ['moex','us'], true) ? $_GET['market'] : '';
         $sort   = in_array($_GET['sort'] ?? '', ['mape','hit','count','ticker'], true) ? $_GET['sort'] : 'mape';
-
         $results = screener_data($days, $market);
         usort($results, function ($a, $b) use ($sort) {
             switch ($sort) {
@@ -390,7 +402,6 @@ switch ($route) {
                 default:       return $a['mape'] <=> $b['mape'];
             }
         });
-
         header('Content-Type: text/csv; charset=utf-8');
         header('Content-Disposition: attachment; filename="screener_' . date('Y-m-d') . '_' . $days . 'd.csv"');
         echo "\xEF\xBB\xBF";
@@ -419,24 +430,21 @@ switch ($route) {
         break;
 
     case 'backfill-history':
+        // ... (код без изменений) ...
         require_admin();
         @set_time_limit(55);
         @ignore_user_abort(false);
-
         if (!empty($_GET['reset'])) {
             db()->exec("UPDATE stock_map SET history_skip_until = NULL WHERE history_skip_until IS NOT NULL");
         }
-
         $isAjax    = !empty($_GET['ajax']);
         $days      = max(365, min(18250, (int)($_GET['days'] ?? 7300)));
         $startTime = time();
         $maxDur    = 20;
         $processed = 0;
         $failed    = [];
-
         while (true) {
             if (time() - $startTime > $maxDur) break;
-
             $row = db()->query(
                 "SELECT DISTINCT fl.market, fl.ticker
                  FROM forecast_lines fl
@@ -447,7 +455,6 @@ switch ($route) {
                  LIMIT 1"
             )->fetch();
             if (!$row) break;
-
             try {
                 $res = history_get($row['market'], $row['ticker'], $days, 'live');
                 if (!empty($res['data'])) {
@@ -466,10 +473,8 @@ switch ($route) {
                      WHERE market = ? AND ticker = ?"
                 )->execute([$row['market'], $row['ticker']]);
             }
-
             break;
         }
-
         $remaining = (int)db()->query(
             "SELECT COUNT(DISTINCT CONCAT(fl.market, ':', fl.ticker))
              FROM forecast_lines fl
@@ -478,11 +483,9 @@ switch ($route) {
              WHERE hb.stock_id IS NULL
                AND (sm.history_skip_until IS NULL OR sm.history_skip_until < NOW())"
         )->fetchColumn();
-
         $skipped = (int)db()->query(
             "SELECT COUNT(*) FROM stock_map WHERE history_skip_until > NOW()"
         )->fetchColumn();
-
         if ($isAjax) {
             header('Content-Type: application/json');
             echo json_encode([
@@ -516,7 +519,31 @@ switch ($route) {
         include __DIR__ . '/pages/admin.php';
         break;
 
-    // ---------- Настройки отображения ----------
+    // ---------- НОВОЕ: Анонсы и новости проекта ----------
+    case 'admin-announcement-add':
+        require_admin();
+        $title = trim($_POST['title'] ?? '');
+        $content = trim($_POST['content'] ?? '');
+        if ($title === '' || $content === '') {
+            flash('Заполните заголовок и текст новости');
+        } else {
+            $stmt = db()->prepare("INSERT INTO announcements (title, content) VALUES (?, ?)");
+            $stmt->execute([$title, $content]);
+            flash('Анонс успешно добавлен');
+        }
+        header('Location: ' . url('admin'));
+        break;
+
+    case 'admin-announcement-delete':
+        require_admin();
+        $id = (int)($_POST['id'] ?? 0);
+        if ($id > 0) {
+            db()->prepare("DELETE FROM announcements WHERE id = ?")->execute([$id]);
+            flash('Анонс удалён');
+        }
+        header('Location: ' . url('admin'));
+        break;
+
     case 'admin-settings':
         require_admin();
         $type = ($_POST['chart_type'] ?? 'line') === 'candles' ? 'candles' : 'line';
@@ -526,6 +553,7 @@ switch ($route) {
         break;
 
     case 'admin-upload':
+        // ... (код без изменений) ...
         require_admin();
         $market     = $_POST['market'] ?? '';
         $ticker     = strtoupper(trim($_POST['ticker'] ?? ''));
@@ -565,6 +593,7 @@ switch ($route) {
         break;
 
     case 'admin-import-stocks':
+        // ... (код без изменений) ...
         require_admin();
         if (empty($_FILES['file']['tmp_name']) || !is_uploaded_file($_FILES['file']['tmp_name'])) {
             flash('Файл не загружен'); header('Location: ' . url('admin')); exit;
@@ -577,6 +606,7 @@ switch ($route) {
         break;
 
     case 'admin-import-forecasts':
+        // ... (код без изменений) ...
         require_admin();
         $lineNum = (int)($_POST['line_num'] ?? 1);
         if ($lineNum < 1 || $lineNum > 3) $lineNum = 1;
@@ -591,6 +621,7 @@ switch ($route) {
         break;
 
     case 'admin-clear-stock-map':
+        // ... (код без изменений) ...
         require_admin();
         db()->exec("DELETE FROM stock_map");
         flash('Справочник очищен');
@@ -598,6 +629,7 @@ switch ($route) {
         break;
 
     case 'admin-clear-cache':
+        // ... (код без изменений) ...
         require_admin();
         @unlink(__DIR__ . '/data/recent_hits_cache.json');
         @unlink(__DIR__ . '/data/moex_shares.json');
@@ -609,6 +641,7 @@ switch ($route) {
         break;
 
     case 'admin-delete':
+        // ... (код без изменений) ...
         require_admin();
         $id = (int)($_POST['id'] ?? 0);
         if ($id > 0) {
@@ -619,6 +652,7 @@ switch ($route) {
         break;
 
     case 'admin-password':
+        // ... (код без изменений) ...
         require_admin();
         $new = $_POST['new_password'] ?? '';
         if (strlen($new) < 6) {

@@ -82,6 +82,18 @@ function db_init($pdo) {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
 
+    // Таблица для анонсов и новостей проекта
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS announcements (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            title VARCHAR(255) NOT NULL,
+            content TEXT NOT NULL,
+            is_active TINYINT(1) DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    // Миграции для forecast_lines
     try {
         $cols = $pdo->query("SHOW COLUMNS FROM forecast_lines")->fetchAll(PDO::FETCH_COLUMN);
         if (!in_array('value_type', $cols)) {
@@ -89,6 +101,7 @@ function db_init($pdo) {
         }
     } catch (PDOException $e) {}
 
+    // Миграции для stock_map
     try {
         $cols = $pdo->query("SHOW COLUMNS FROM stock_map")->fetchAll(PDO::FETCH_COLUMN);
         if (!in_array('history_skip_until', $cols)) {
@@ -110,6 +123,7 @@ function db_init($pdo) {
         }
     } catch (PDOException $e) {}
 
+    // Дефолтный админ
     $c = (int)$pdo->query("SELECT COUNT(*) FROM admins")->fetchColumn();
     if ($c === 0) {
         $stmt = $pdo->prepare("INSERT INTO admins (username, password_hash) VALUES (?, ?)");

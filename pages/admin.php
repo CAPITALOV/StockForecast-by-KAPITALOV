@@ -11,6 +11,10 @@ $stockSample = $pdo->query(
     "SELECT id, market, ticker, name FROM stock_map ORDER BY id LIMIT 10"
 )->fetchAll();
 
+$announcements = $pdo->query(
+    "SELECT id, title, content, created_at FROM announcements ORDER BY created_at DESC"
+)->fetchAll();
+
 $flash = get_flash();
 $currentChartType = get_setting('chart_type', 'line');
 ?>
@@ -103,6 +107,54 @@ $currentChartType = get_setting('chart_type', 'line');
 
 <hr style="margin:32px 0;border:0;border-top:1px solid #2a2e39">
 
+<!-- ================= АНОНСЫ И НОВОСТИ ================= -->
+<h2>Анонсы и новости для клиентов</h2>
+<div class="card upload-card" style="margin-bottom: 32px;">
+    <h3>Добавить новый анонс</h3>
+    <form method="post" action="<?= url('admin-announcement-add') ?>">
+        <label>Заголовок
+            <input type="text" name="title" placeholder="Например: Обновление системы!" required>
+        </label>
+        <label>Текст анонса
+            <textarea name="content" rows="4" placeholder="Мы добавили свечи и новые индикаторы..." required></textarea>
+        </label>
+        <button type="submit">Опубликовать</button>
+    </form>
+</div>
+
+<?php if ($announcements): ?>
+<table class="stock-table">
+<thead>
+<tr>
+    <th>Дата</th>
+    <th>Заголовок</th>
+    <th>Текст</th>
+    <th>Действия</th>
+</tr>
+</thead>
+<tbody>
+<?php foreach ($announcements as $a): ?>
+    <tr>
+        <td><?= date('d.m.Y H:i', strtotime($a['created_at'])) ?></td>
+        <td><b><?= h($a['title']) ?></b></td>
+        <td><?= nl2br(h($a['content'])) ?></td>
+        <td>
+            <form method="post" action="<?= url('admin-announcement-delete') ?>"
+                  onsubmit="return confirm('Удалить этот анонс?')">
+                <input type="hidden" name="id" value="<?= (int)$a['id'] ?>">
+                <button type="submit" class="btn-danger">Удалить</button>
+            </form>
+        </td>
+    </tr>
+<?php endforeach; ?>
+</tbody>
+</table>
+<?php else: ?>
+    <p class="muted">Пока нет опубликованных анонсов.</p>
+<?php endif; ?>
+
+<hr style="margin:40px 0 24px;border:0;border-top:1px solid #2a2e39">
+
 <h2>Ручная загрузка прогноза</h2>
 <p class="muted">
     Для одной линии одного тикера. Форматы: <code>250.50 15 03 2024</code> ·
@@ -193,7 +245,6 @@ $currentChartType = get_setting('chart_type', 'line');
 
 <hr style="margin:40px 0 24px;border:0;border-top:1px solid #2a2e39">
 
-<!-- ================= НАСТРОЙКИ ОТОБРАЖЕНИЯ ================= -->
 <h2>Настройки отображения</h2>
 <div class="card upload-card" style="max-width: 500px;">
     <form method="post" action="<?= url('admin-settings') ?>">
