@@ -14,13 +14,14 @@ $defaultChartType = get_setting('chart_type', 'line');
 <meta charset="utf-8">
 <title><?= h($ticker) ?> — прогноз и верификация</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="static/style.css">
+<link rel="stylesheet" href="static/style.css?v=2">
 </head>
 <body>
 <header class="topbar">
     <a class="logo" href="index.php">📈 StockForecast</a>
     <nav>
         <a href="index.php?market=<?= h($market) ?>">← К списку</a>
+        <a href="index.php?r=news">Новости</a>
         <a href="index.php?r=screener">Screener</a>
         <a href="index.php?r=accuracy">Точность</a>
         <a href="<?= is_admin() ? url('admin') : url('admin-login') ?>">Админка</a>
@@ -28,6 +29,15 @@ $defaultChartType = get_setting('chart_type', 'line');
     </nav>
 </header>
 <main>
+
+<nav class="breadcrumbs" aria-label="Хлебные крошки">
+    <a href="index.php">Главная</a>
+    <span class="sep">/</span>
+    <a href="index.php?market=<?= h($market) ?>"><?= strtoupper(h($market)) ?></a>
+    <span class="sep">/</span>
+    <span class="current"><?= h($ticker) ?></span>
+</nav>
+
 <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:12px">
     <h1 style="margin-bottom:8px"><?= h($ticker) ?> <small>(<?= strtoupper(h($market)) ?>)</small></h1>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
@@ -84,6 +94,7 @@ $defaultChartType = get_setting('chart_type', 'line');
             <option value="macd">MACD</option>
         </select>
     </label>
+    <button type="button" id="toggle-lower" class="btn" title="Скрыть/показать нижнюю панель">📊 Панель</button>
     <span id="status" class="status"></span>
 </div>
 
@@ -98,10 +109,9 @@ $defaultChartType = get_setting('chart_type', 'line');
 <div id="rsi-legend" class="legend"><span class="muted">Загрузка…</span></div>
 
 <h2 style="margin-top:48px">Верификация прогнозов</h2>
-<p class="muted">Сравнение прогнозной цены с фактической историей. Delta пересчитана через cumprod.</p>
+<p class="muted">Наведите курсор на график — увидите прогноз, факт, отклонение и статус по каждой точке.</p>
 <div id="verify-container"><p class="muted">Загрузка верификации…</p></div>
 
-<!-- Сравнение прогнозов -->
 <section class="section" style="margin-top:48px">
     <div class="section-head">
         <h2>Сравнение моделей прогноза</h2>
@@ -111,7 +121,6 @@ $defaultChartType = get_setting('chart_type', 'line');
     <div id="compare-forecasts-legend" class="legend"></div>
 </section>
 
-<!-- Новости -->
 <?php if (!empty($news)): ?>
 <section class="section" style="margin-top:48px">
     <div class="section-head">
@@ -164,34 +173,27 @@ const maHintEl   = document.getElementById('ma-hint');
 const DEFAULT_CHART_TYPE = '<?= $defaultChartType ?>';
 let chartType = localStorage.getItem('sf_chart_type') || DEFAULT_CHART_TYPE;
 
-// Все переменные графиков и серий — глобальные, чтобы их можно было сбросить
-let chart = null;
-let rsiChart = null;
-let priceSeries = null;
-let rsiSeries = null;
-let forecastSeries = [];
-let maSeries = null;
-let bbSeries = [];
-let macdSeries = [];
-let compareForecastsChart = null;
+let chart = null, rsiChart = null, compareForecastsChart = null;
+let priceSeries = null, rsiSeries = null;
+let forecastSeries = [], maSeries = null, bbSeries = [], macdSeries = [];
+let forecastLinesData = null, verifyData = null;
+let tooltipEl = null;
 
 const legendState = { price: 0, lines: [], ma: null, bb: null, lower: 0 };
 
 function getColors() {
-    const style = getComputedStyle(document.body);
+    const s = getComputedStyle(document.body);
     return {
-        bg: style.getPropertyValue('--bg-card').trim() || '#131722',
-        text: style.getPropertyValue('--text').trim() || '#d1d4dc',
-        border: style.getPropertyValue('--border').trim() || '#2a2e39',
-        grid: style.getPropertyValue('--border').trim() || '#1e222d',
+        bg: s.getPropertyValue('--bg-card').trim() || '#131722',
+        text: s.getPropertyValue('--text').trim() || '#d1d4dc',
+        border: s.getPropertyValue('--border').trim() || '#2a2e39',
     };
 }
-
 function chartOptions() {
     const c = getColors();
     return {
         layout: { background: { color: c.bg }, textColor: c.text },
-        grid: { vertLines: { color: c.grid }, horzLines: { color: c.grid } },
+        grid: { vertLines: { color: c.border }, horzLines: { color: c.border } },
         crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
         leftPriceScale:  { visible: true, borderColor: c.border, scaleMargins: { top: 0.1, bottom: 0.1 } },
         rightPriceScale: { visible: true, borderColor: c.border, scaleMargins: { top: 0.1, bottom: 0.1 } },
@@ -199,19 +201,88 @@ function chartOptions() {
     };
 }
 
-// Полный сброс графиков
+function showSkeleton() {
+    chartEl.innerHTML = '<div class="chart-loading"><div class="skeleton skeleton-block"></div><div class="skeleton skeleton-line short"></div></div>';
+    rsiChartEl.innerHTML = '<div class="chart-loading"><div class="skeleton" style="height:120px;width:100%"></div></div>';
+}
+function hideSkeleton() {
+    const a = chartEl.querySelector('.chart-loading');
+    if (a) a.remove();
+    const b = rsiChartEl.querySelector('.chart-loading');
+    if (b) b.remove();
+}
+
 function destroyCharts() {
     if (chart) { try { chart.remove(); } catch(e){} chart = null; }
     if (rsiChart) { try { rsiChart.remove(); } catch(e){} rsiChart = null; }
     if (compareForecastsChart) { try { compareForecastsChart.remove(); } catch(e){} compareForecastsChart = null; }
     chartEl.innerHTML = '';
     rsiChartEl.innerHTML = '';
-    forecastSeries = [];
-    bbSeries = [];
-    macdSeries = [];
-    maSeries = null;
-    priceSeries = null;
-    rsiSeries = null;
+    forecastSeries = []; bbSeries = []; macdSeries = [];
+    maSeries = null; priceSeries = null; rsiSeries = null;
+}
+
+function setupTooltip() {
+    if (tooltipEl) tooltipEl.remove();
+    tooltipEl = document.createElement('div');
+    tooltipEl.className = 'chart-tooltip';
+    chartEl.appendChild(tooltipEl);
+
+    chart.subscribeCrosshairMove(param => {
+        if (!param.time || !param.point ||
+            param.point.x < 0 || param.point.x > chartEl.clientWidth ||
+            param.point.y < 0 || param.point.y > chartEl.clientHeight) {
+            tooltipEl.style.display = 'none';
+            return;
+        }
+        let date = null;
+        if (typeof param.time === 'string') date = param.time;
+        else if (param.time && param.time.year)
+            date = `${param.time.year}-${String(param.time.month).padStart(2,'0')}-${String(param.time.day).padStart(2,'0')}`;
+        if (!date) { tooltipEl.style.display = 'none'; return; }
+
+        const priceData = param.seriesData.get(priceSeries);
+        const priceVal = priceData ? (priceData.close ?? priceData.value) : null;
+
+        const rows = [];
+        if (priceVal !== null && priceVal !== undefined) rows.push(['Факт', Number(priceVal).toFixed(2)]);
+
+        if (forecastLinesData) {
+            forecastLinesData.forEach(line => {
+                const pt = (line.data || []).find(p => p.time === date);
+                if (pt) rows.push([line.name.replace('Прогноз ', 'П'), Number(pt.value).toFixed(4)]);
+            });
+        }
+
+        if (verifyData) {
+            verifyData.forEach(line => {
+                if (!line.verify || !line.verify.rows) return;
+                const r = line.verify.rows.find(x => x.time === date);
+                if (r) {
+                    const dev = r.deviation_pct !== null ? r.deviation_pct.toFixed(2) + '%' : '—';
+                    const cls = r.status === 'сбылся' ? 'status-ok' : r.status === 'не сбылся' ? 'status-no' : '';
+                    rows.push(['Отклонение', `<span class="${cls}">${dev}</span>`]);
+                    rows.push(['Статус', `<span class="${cls}">${r.status}</span>`]);
+                }
+            });
+        }
+
+        if (!rows.length) { tooltipEl.style.display = 'none'; return; }
+
+        let html = `<div class="tooltip-date">${date}</div>`;
+        rows.forEach(([k, v]) => {
+            html += `<div class="row"><span>${k}:</span><span class="val">${v}</span></div>`;
+        });
+        tooltipEl.innerHTML = html;
+        tooltipEl.style.display = 'block';
+
+        let x = param.point.x + 15;
+        let y = param.point.y + 15;
+        if (x + 230 > chartEl.clientWidth) x = param.point.x - 230;
+        if (y + 160 > chartEl.clientHeight) y = param.point.y - 160;
+        tooltipEl.style.left = x + 'px';
+        tooltipEl.style.top = y + 'px';
+    });
 }
 
 function initCharts() {
@@ -235,7 +306,6 @@ function initCharts() {
         rsiSeries.createPriceLine({ price: 30, color: '#26a69a', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed });
     } catch (e) {}
 
-    // Синхронизация осей
     let busy = false;
     const link = (a, b) => a.timeScale().subscribeVisibleLogicalRangeChange(r => {
         if (busy || !r) return;
@@ -245,6 +315,8 @@ function initCharts() {
     });
     link(chart, rsiChart);
     link(rsiChart, chart);
+
+    setupTooltip();
 }
 
 function renderLegend(items) {
@@ -265,18 +337,8 @@ function rebuildLegend() {
             points: line.points, dimmed: !line.points,
         });
     });
-    if (legendState.ma) {
-        items.push({
-            color: legendState.ma.color, name: legendState.ma.name,
-            points: legendState.ma.points, dimmed: !legendState.ma.points,
-        });
-    }
-    if (legendState.bb) {
-        items.push({
-            color: legendState.bb.color, name: legendState.bb.name,
-            points: legendState.bb.points, dimmed: !legendState.bb.points,
-        });
-    }
+    if (legendState.ma) items.push({ color: legendState.ma.color, name: legendState.ma.name, points: legendState.ma.points, dimmed: !legendState.ma.points });
+    if (legendState.bb) items.push({ color: legendState.bb.color, name: legendState.bb.name, points: legendState.bb.points, dimmed: !legendState.bb.points });
     document.getElementById('main-legend').innerHTML = renderLegend(items);
     document.getElementById('rsi-legend').innerHTML = renderLegend([
         { color: RSI_COLOR, name: 'Нижняя панель', points: legendState.lower, dimmed: !legendState.lower },
@@ -287,17 +349,15 @@ async function loadAll() {
     const days = document.getElementById('period').value;
     const g = document.getElementById('granularity').value;
     statusEl.textContent = 'Загрузка…';
-
-    // 1. Полный сброс графиков
+    showSkeleton();
     destroyCharts();
     initCharts();
 
-    // 2. Данные цены
     try {
         const url = `index.php?r=api-history&market=${encodeURIComponent(MARKET)}&ticker=${encodeURIComponent(TICKER)}&days=${days}&granularity=${g}`;
         const r = await fetch(url); const j = await r.json();
         if (!j.ok) throw new Error(j.error || 'API error');
-        
+
         if (chartType === 'candles') {
             priceSeries = chart.addCandlestickSeries({
                 upColor: '#26a69a', downColor: '#ef5350',
@@ -313,29 +373,26 @@ async function loadAll() {
             priceSeries.setData(j.data.map(d => ({ time: d.time, value: d.value })));
         }
         legendState.price = (j.data || []).length;
+        hideSkeleton();
     } catch (e) {
+        hideSkeleton();
         statusEl.textContent = 'Ошибка загрузки цен: ' + e.message;
         return;
     }
 
-    // 3. Прогнозы
     legendState.lines = [];
     try {
-        const fr = await fetch(
-            `index.php?r=api-forecast&market=${encodeURIComponent(MARKET)}&ticker=${encodeURIComponent(TICKER)}&granularity=${g}`
-        );
+        const fr = await fetch(`index.php?r=api-forecast&market=${encodeURIComponent(MARKET)}&ticker=${encodeURIComponent(TICKER)}&granularity=${g}`);
         const fj = await fr.json();
         const lines = fj.lines || [];
+        forecastLinesData = lines;
         legendState.lines = lines;
         lines.forEach((line) => {
             if (!line.data || !line.data.length) return;
             const scale = line.value_type === 'delta' ? 'right' : 'left';
             const s = chart.addLineSeries({
-                color: line.color || '#888',
-                lineWidth: 2,
-                lineStyle: line.computed
-                    ? LightweightCharts.LineStyle.Dotted
-                    : LightweightCharts.LineStyle.Dashed,
+                color: line.color || '#888', lineWidth: 2,
+                lineStyle: line.computed ? LightweightCharts.LineStyle.Dotted : LightweightCharts.LineStyle.Dashed,
                 title: line.name, priceScaleId: scale,
                 priceLineVisible: false, lastValueVisible: true,
             });
@@ -344,17 +401,13 @@ async function loadAll() {
         });
     } catch (e) { console.warn('forecast:', e); }
 
-    // 4. Индикаторы (MA, Bollinger)
     await loadMA();
     await loadBollinger();
     await loadLowerPanel();
-    
     rebuildLegend();
     chart.timeScale().fitContent();
     rsiChart.timeScale().fitContent();
     statusEl.textContent = 'Готово';
-
-    // 5. Верификация и сравнение
     loadVerification();
     loadCompareForecasts();
 }
@@ -423,9 +476,7 @@ async function loadBollinger() {
         mk(d.upper, BB_COLOR, 'BB upper', true);
         mk(d.sma,   '#ffffff', 'BB mid', false);
         mk(d.lower, BB_COLOR, 'BB lower', true);
-        if (d.sma && d.sma.length) {
-            legendState.bb = { color: BB_COLOR, name: 'Bollinger(' + period + ',' + mult + ')', points: d.sma.length };
-        }
+        if (d.sma && d.sma.length) legendState.bb = { color: BB_COLOR, name: 'Bollinger(' + period + ',' + mult + ')', points: d.sma.length };
         rebuildLegend();
     } catch (e) { console.warn('bb:', e); }
 }
@@ -435,7 +486,6 @@ async function loadLowerPanel() {
     const days = document.getElementById('period').value;
     const g    = document.getElementById('granularity').value;
 
-    // Очищаем нижнюю панель
     macdSeries.forEach(s => { try { rsiChart.removeSeries(s); } catch(e){} });
     macdSeries = [];
     if (rsiSeries) { try { rsiSeries.setData([]); } catch(e){} }
@@ -467,16 +517,8 @@ async function loadLowerPanel() {
                 sigLine.setData(d.signal || []);
                 macdSeries.push(sigLine);
                 if (d.histogram && d.histogram.length) {
-                    const hist = rsiChart.addHistogramSeries({
-                        color: '#26a69a',
-                        priceFormat: { type: 'volume' },
-                        priceScaleId: 'right',
-                    });
-                    hist.setData(d.histogram.map(p => ({
-                        time: p.time,
-                        value: p.value,
-                        color: p.value >= 0 ? '#26a69a' : '#ef5350',
-                    })));
+                    const hist = rsiChart.addHistogramSeries({ color: '#26a69a', priceFormat: { type: 'volume' }, priceScaleId: 'right' });
+                    hist.setData(d.histogram.map(p => ({ time: p.time, value: p.value, color: p.value >= 0 ? '#26a69a' : '#ef5350' })));
                     macdSeries.push(hist);
                 }
                 legendState.lower = (d.macd || []).length;
@@ -490,11 +532,10 @@ async function loadVerification() {
     const box = document.getElementById('verify-container');
     box.innerHTML = '<p class="muted">Загрузка верификации…</p>';
     try {
-        const r = await fetch(
-            `index.php?r=api-verify&market=${encodeURIComponent(MARKET)}&ticker=${encodeURIComponent(TICKER)}`
-        );
+        const r = await fetch(`index.php?r=api-verify&market=${encodeURIComponent(MARKET)}&ticker=${encodeURIComponent(TICKER)}`);
         const j = await r.json();
         if (!j.ok) throw new Error(j.error || 'API error');
+        verifyData = j.lines;
         renderVerification(j.lines);
     } catch (e) {
         box.innerHTML = '<p class="warn">Не удалось загрузить верификацию: ' + e.message + '</p>';
@@ -503,32 +544,18 @@ async function loadVerification() {
 
 function renderVerification(lines) {
     const box = document.getElementById('verify-container');
-    if (!lines || !lines.length) {
-        box.innerHTML = '<p class="warn">Прогнозов для верификации нет.</p>';
-        return;
-    }
+    if (!lines || !lines.length) { box.innerHTML = '<p class="warn">Прогнозов для верификации нет.</p>'; return; }
     let html = '';
     for (const line of lines) {
         const v = line.verify;
         html += `<h3 style="margin-top:28px;color:${line.color}">${line.name}</h3>`;
-        if (!v.rows || !v.rows.length) {
-            html += '<p class="muted">Нет пересечения прогноза с фактической историей.</p>';
-            continue;
-        }
-        if (v.mape !== null) {
-            html += `<p class="muted">MAPE: <b>${v.mape}%</b> · Hit-rate: <b>${(v.hit_rate*100).toFixed(1)}%</b> · Точек: ${v.count}</p>`;
-        }
-        html += '<table class="stock-table"><thead><tr>' +
-                '<th>Дата</th><th>Прогноз (цена)</th><th>Факт</th><th>Отклонение, %</th><th>Статус</th>' +
-                '</tr></thead><tbody>';
+        if (!v.rows || !v.rows.length) { html += '<p class="muted">Нет пересечения прогноза с фактической историей.</p>'; continue; }
+        if (v.mape !== null) html += `<p class="muted">MAPE: <b>${v.mape}%</b> · Hit-rate: <b>${(v.hit_rate*100).toFixed(1)}%</b> · Точек: ${v.count}</p>`;
+        html += '<table class="stock-table"><thead><tr><th>Дата</th><th>Прогноз (цена)</th><th>Факт</th><th>Отклонение, %</th><th>Статус</th></tr></thead><tbody>';
         for (const row of v.rows) {
             const dev = row.deviation_pct !== null ? row.deviation_pct.toFixed(2) : '—';
-            const cls = row.status === 'сбылся' ? 'status-ok' :
-                        row.status === 'не сбылся' ? 'status-no' : '';
-            html += `<tr>
-                <td>${row.time}</td><td>${row.forecast}</td><td>${row.fact}</td>
-                <td class="${cls}">${dev}</td><td class="${cls}">${row.status}</td>
-            </tr>`;
+            const cls = row.status === 'сбылся' ? 'status-ok' : row.status === 'не сбылся' ? 'status-no' : '';
+            html += `<tr><td>${row.time}</td><td>${row.forecast}</td><td>${row.fact}</td><td class="${cls}">${dev}</td><td class="${cls}">${row.status}</td></tr>`;
         }
         html += '</tbody></table>';
     }
@@ -539,49 +566,28 @@ async function loadCompareForecasts() {
     const el = document.getElementById('compare-forecasts-chart');
     const legendEl = document.getElementById('compare-forecasts-legend');
     if (!el) return;
-
     if (compareForecastsChart) { try { compareForecastsChart.remove(); } catch(e){} }
-    
     const opts = chartOptions();
-    compareForecastsChart = LightweightCharts.createChart(el, Object.assign({}, opts, {
-        width: el.clientWidth, height: 360
-    }));
+    compareForecastsChart = LightweightCharts.createChart(el, Object.assign({}, opts, { width: el.clientWidth, height: 360 }));
     window.compareForecastsChart = compareForecastsChart;
 
-    const url = `index.php?r=api-forecast&market=${encodeURIComponent(MARKET)}&ticker=${encodeURIComponent(TICKER)}`;
-    const res = await fetch(url);
+    const res = await fetch(`index.php?r=api-forecast&market=${encodeURIComponent(MARKET)}&ticker=${encodeURIComponent(TICKER)}`);
     const data = await res.json();
-
     const lines = data.lines || [];
     const colors = { 1: '#ef5350', 2: '#42a5f5', 3: '#ffa726' };
     const legendItems = [];
-
     for (const line of lines) {
-        if (!line.data || line.data.length === 0) continue;
+        if (!line.data || !line.data.length) continue;
         const base = line.data[0].value;
         if (base === 0) continue;
-        const normalized = line.data.map(p => ({
-            time: p.time,
-            value: (p.value / base) * 100,
-        }));
-
-        const series = compareForecastsChart.addLineSeries({
-            color: colors[line.line_num] || '#888',
-            lineWidth: 2,
-            title: line.name,
-        });
+        const normalized = line.data.map(p => ({ time: p.time, value: (p.value / base) * 100 }));
+        const series = compareForecastsChart.addLineSeries({ color: colors[line.line_num] || '#888', lineWidth: 2, title: line.name });
         series.setData(normalized);
-        legendItems.push({
-            color: colors[line.line_num],
-            name: line.name,
-            points: normalized.length,
-        });
+        legendItems.push({ color: colors[line.line_num], name: line.name, points: normalized.length });
     }
-
     legendEl.innerHTML = legendItems.map(i =>
         `<span class="legend-item"><i style="background:${i.color}"></i> ${i.name} (${i.points})</span>`
     ).join('');
-
     compareForecastsChart.timeScale().fitContent();
 }
 
@@ -604,9 +610,27 @@ document.getElementById('btn-export-png').addEventListener('click', function () 
         link.href = outCanvas.toDataURL('image/png');
         link.click();
     } catch (e) {
-        console.error('Ошибка при экспорте PNG:', e);
-        alert('Не удалось сохранить график как изображение.');
+        console.error(e);
+        alert('Не удалось сохранить график.');
     }
+});
+
+// Кнопка "Скрыть/показать нижнюю панель" — с защитой от width:0
+document.getElementById('toggle-lower').addEventListener('click', function () {
+    document.body.classList.toggle('hide-lower');
+    const hidden = document.body.classList.contains('hide-lower');
+    setTimeout(() => {
+        try {
+            if (chart) {
+                const w = chartEl.clientWidth;
+                if (w > 0) chart.applyOptions({ width: w });
+            }
+            if (rsiChart && !hidden) {
+                const rw = rsiChartEl.clientWidth;
+                if (rw > 0) rsiChart.applyOptions({ width: rw });
+            }
+        } catch (e) { /* игнорируем нулевую ширину */ }
+    }, 50);
 });
 
 document.getElementById('period').addEventListener('change', loadAll);
@@ -627,13 +651,18 @@ document.getElementById('ma-period').addEventListener('input', function () {
     maDebounce = setTimeout(loadMA, 400);
 });
 
+// Resize — с защитой от скрытых панелей (ширина 0)
 window.addEventListener('resize', function () {
-    if (chart) chart.applyOptions({ width: chartEl.clientWidth });
-    if (rsiChart) rsiChart.applyOptions({ width: rsiChartEl.clientWidth });
-    if (compareForecastsChart) compareForecastsChart.applyOptions({ width: document.getElementById('compare-forecasts-chart').clientWidth });
+    try {
+        if (chart && chartEl.clientWidth > 0) chart.applyOptions({ width: chartEl.clientWidth });
+        if (rsiChart && !document.body.classList.contains('hide-lower') && rsiChartEl.clientWidth > 0)
+            rsiChart.applyOptions({ width: rsiChartEl.clientWidth });
+        const cmpEl = document.getElementById('compare-forecasts-chart');
+        if (compareForecastsChart && cmpEl && cmpEl.clientWidth > 0)
+            compareForecastsChart.applyOptions({ width: cmpEl.clientWidth });
+    } catch (e) {}
 });
 
-// Инициализация
 document.getElementById('chart-type').value = chartType;
 loadAll();
 </script>
