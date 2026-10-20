@@ -1,3 +1,4 @@
+/* ==================== БАЗОВЫЕ ==================== */
 :root {
     --bg: #0e1117;
     --bg-card: #131722;
@@ -31,10 +32,13 @@ body {
 .topbar {
     display: flex; justify-content: space-between; align-items: center;
     padding: 12px 24px; background: var(--bg-card); border-bottom: 1px solid var(--border);
+    flex-wrap: wrap; gap: 8px;
 }
 .logo { color: var(--accent); font-weight: 700; text-decoration: none; font-size: 18px; }
+.topbar nav { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
 .topbar nav a { color: var(--text); text-decoration: none; margin-left: 16px; }
 .topbar nav a:hover { color: var(--accent); }
+.topbar nav .btn { margin-left: 12px; }
 main { max-width: 1100px; margin: 24px auto; padding: 0 16px; }
 h1 { margin-top: 0; }
 h1 small { color: var(--text-muted); font-weight: 400; font-size: 16px; }
@@ -58,7 +62,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
        background: var(--border); color: var(--accent); text-decoration: none; font-size: 13px;
        border: 0; cursor: pointer; }
 .btn:hover { background: var(--accent); color: #fff; }
-.chart { height: 480px; width: 100%; border-radius: 8px; overflow: hidden; }
+.chart { height: 480px; width: 100%; border-radius: 8px; overflow: hidden; position: relative; }
 .chart-controls { display: flex; justify-content: space-between;
                   align-items: center; margin: 12px 0; gap: 12px; flex-wrap: wrap; }
 .chart-controls label { display: flex; align-items: center; gap: 6px; font-size: 13px; }
@@ -95,6 +99,7 @@ code { background: var(--border); padding: 2px 6px; border-radius: 4px; color: #
 .status-no { color: var(--danger); font-size: 13px; }
 footer { text-align: center; color: var(--text-muted); padding: 24px; font-size: 12px; }
 
+/* ==================== АДМИНКА: ФОРМА ЗАГРУЗКИ ==================== */
 .upload-card { margin-top: 16px; }
 .upload-card h3 { margin-top: 0; }
 .upload-card form { display: flex; flex-direction: column; gap: 14px; }
@@ -133,6 +138,7 @@ footer { text-align: center; color: var(--text-muted); padding: 24px; font-size:
 }
 .btn-danger:hover { background: var(--danger); color: #fff; }
 
+/* ==================== ЛЕНДИНГ ==================== */
 .eyebrow {
     display: inline-block;
     padding: 4px 12px; border-radius: 999px;
@@ -206,6 +212,8 @@ footer { text-align: center; color: var(--text-muted); padding: 24px; font-size:
     .hero { padding: 40px 16px 28px; }
     .section-head h2 { font-size: 24px; }
 }
+
+/* ==================== RSI / НОВОСТИ ==================== */
 .rsi-chart {
     height: 160px; width: 100%; margin-top: 4px;
     border-radius: 8px; overflow: hidden;
@@ -215,23 +223,130 @@ footer { text-align: center; color: var(--text-muted); padding: 24px; font-size:
     margin: 16px 0 4px; font-size: 13px;
 }
 .chart-controls label input[type=checkbox] {
-    margin-right: 4px;
-    vertical-align: middle;
+    margin-right: 4px; vertical-align: middle;
 }
-.macd-hist-pos { color: var(--accent); }
-.macd-hist-neg { color: var(--danger); }
-
-/* Новости */
 .news-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    font-size: 14px;
-    background: var(--border);
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 24px; height: 24px; border-radius: 50%;
+    font-size: 14px; background: var(--border);
 }
 .news-icon.yahoo { color: #ba68c8; }
 .news-icon.moex { color: #fdd835; }
 .news-icon.euler { color: #64b5f6; }
+
+/* ==================== НОВОЕ: SKELETON ==================== */
+.chart-loading {
+    position: absolute; inset: 0;
+    background: var(--bg-card); border-radius: 8px;
+    z-index: 10; padding: 12px;
+    display: flex; flex-direction: column; gap: 8px;
+}
+.skeleton {
+    background: linear-gradient(90deg, var(--bg-card) 25%, var(--border) 50%, var(--bg-card) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.4s infinite;
+    border-radius: 8px;
+}
+.skeleton-block { flex: 1; width: 100%; }
+.skeleton-line { height: 20px; width: 100%; }
+.skeleton-line.short { width: 55%; }
+@keyframes skeleton-shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* ==================== НОВОЕ: ХЛЕБНЫЕ КРОШКИ ==================== */
+.breadcrumbs {
+    display: flex; flex-wrap: wrap; align-items: center;
+    gap: 6px; margin-bottom: 12px;
+    font-size: 13px; color: var(--text-muted);
+}
+.breadcrumbs a { color: var(--text-muted); text-decoration: none; }
+.breadcrumbs a:hover { color: var(--accent); }
+.breadcrumbs .sep { color: var(--border); }
+.breadcrumbs .current { color: var(--text); font-weight: 500; }
+
+/* ==================== НОВОЕ: ТУЛТИП НА ГРАФИКЕ ==================== */
+#chart { position: relative; }
+.chart-tooltip {
+    position: absolute; pointer-events: none;
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 6px; padding: 10px 12px;
+    font-size: 12px; color: var(--text);
+    z-index: 1000;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+    display: none; min-width: 190px; line-height: 1.5;
+}
+.chart-tooltip .tooltip-date {
+    font-weight: 700; font-size: 13px;
+    margin-bottom: 6px; color: var(--accent);
+}
+.chart-tooltip .row {
+    display: flex; justify-content: space-between; gap: 12px;
+    margin: 2px 0;
+}
+.chart-tooltip .val { font-weight: 600; }
+.chart-tooltip .status-ok { color: #26a69a; }
+.chart-tooltip .status-no { color: #ef5350; }
+
+/* ==================== НОВОЕ: СКРЫТЬ НИЖНЮЮ ПАНЕЛЬ ==================== */
+body.hide-lower #rsi-chart,
+body.hide-lower #rsi-legend,
+body.hide-lower .rsi-head { display: none; }
+
+@media (max-width: 768px) {
+    .chart { height: 360px; }
+    .rsi-chart { height: 120px; }
+    .chart-controls { gap: 8px; }
+    .chart-controls label { font-size: 12px; }
+    .hero h1 { font-size: 28px; }
+    .breadcrumbs { font-size: 12px; }
+}
+
+/* ==================== НОВОЕ: ОТЗЫВЫ ==================== */
+.review-card { display: flex; flex-direction: column; gap: 12px; }
+.review-author { display: flex; align-items: center; gap: 12px; }
+.review-avatar {
+    width: 42px; height: 42px; border-radius: 50%;
+    background: linear-gradient(135deg, #26a69a, #42a5f5);
+    color: #fff; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+}
+.review-stars { color: #ffd54f; font-size: 14px; letter-spacing: 2px; }
+
+/* ==================== НОВОЕ: FAQ ==================== */
+.faq-item {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 12px;
+}
+.faq-item summary {
+    cursor: pointer;
+    color: var(--text);
+    font-weight: 600;
+    font-size: 15px;
+    list-style: none;
+}
+.faq-item summary::-webkit-details-marker { display: none; }
+.faq-item summary::before {
+    content: '▸';
+    display: inline-block;
+    margin-right: 10px;
+    color: var(--accent);
+    transition: transform 0.2s;
+}
+.faq-item[open] summary::before { transform: rotate(90deg); }
+.faq-item p { margin: 12px 0 0; color: var(--text-muted); font-size: 14px; line-height: 1.7; }
+
+/* ==================== НОВОЕ: СКРИНШОТЫ ==================== */
+.screenshot {
+    width: 100%;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+    display: block;
+    margin-bottom: 12px;
+}
