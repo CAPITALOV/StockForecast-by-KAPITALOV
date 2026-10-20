@@ -2,20 +2,24 @@
 
 ## Supported Versions
 
-Use this section to tell people about which versions of your project are
-currently being supported with security updates.
+We actively maintain and provide security updates for the following versions of StockForecast:
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 5.1.x   | :white_check_mark: |
-| 5.0.x   | :x:                |
-| 4.0.x   | :white_check_mark: |
-| < 4.0   | :x:                |
+| 1.20.x  | :white_check_mark: |
+| < 1.20  | :x:                |
 
 ## Reporting a Vulnerability
 
-Use this section to tell people how to report a vulnerability.
+If you discover a security vulnerability in StockForecast, please **do not** create a public GitHub issue. Instead, report it privately so we can address it before it is disclosed.
 
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+**How to report:**
+- Send an email to **security@kapitalov.org** (or the contact email associated with this repository).
+- Include a detailed description of the vulnerability, steps to reproduce, and any potential impact you have identified.
+
+**What to expect:**
+- We will acknowledge your report within **48 hours**.
+- We will provide an estimated timeline for a fix and keep you informed of our progress.
+- Once the issue is resolved, we will publicly credit you (unless you prefer to remain anonymous) and publish a security advisory if necessary.
+
+Thank you for helping keep StockForecast and its users safe.
