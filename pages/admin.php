@@ -12,7 +12,7 @@ $stockSample = $pdo->query(
 )->fetchAll();
 
 $announcements = $pdo->query(
-    "SELECT id, title, content, created_at FROM announcements ORDER BY created_at DESC"
+    "SELECT id, title, content, image, created_at FROM announcements ORDER BY created_at DESC"
 )->fetchAll();
 
 $flash = get_flash();
@@ -111,14 +111,17 @@ $currentChartType = get_setting('chart_type', 'line');
 <h2>Анонсы и новости для клиентов</h2>
 <div class="card upload-card" style="margin-bottom: 32px;">
     <h3>Добавить новый анонс</h3>
-    <form method="post" action="<?= url('admin-announcement-add') ?>">
+    <form method="post" action="<?= url('admin-announcement-add') ?>" enctype="multipart/form-data">
         <label>Заголовок
             <input type="text" name="title" placeholder="Например: Обновление системы!" required>
         </label>
         <label>Текст анонса
             <textarea name="content" rows="4" placeholder="Мы добавили свечи и новые индикаторы..." required></textarea>
         </label>
-        <button type="submit">Опубликовать</button>
+        <label>Картинка (опционально)
+            <input type="file" name="image" accept="image/*">
+        </label>
+        <button type="submit" style="margin-top: 12px;">Опубликовать</button>
     </form>
 </div>
 
@@ -129,6 +132,7 @@ $currentChartType = get_setting('chart_type', 'line');
     <th>Дата</th>
     <th>Заголовок</th>
     <th>Текст</th>
+    <th>Картинка</th>
     <th>Действия</th>
 </tr>
 </thead>
@@ -137,7 +141,8 @@ $currentChartType = get_setting('chart_type', 'line');
     <tr>
         <td><?= date('d.m.Y H:i', strtotime($a['created_at'])) ?></td>
         <td><b><?= h($a['title']) ?></b></td>
-        <td><?= nl2br(h($a['content'])) ?></td>
+        <td><?= h(mb_substr(strip_tags($a['content']), 0, 100)) ?>...</td>
+        <td><?= $a['image'] ? '✅ Есть' : '—' ?></td>
         <td>
             <form method="post" action="<?= url('admin-announcement-delete') ?>"
                   onsubmit="return confirm('Удалить этот анонс?')">
@@ -245,6 +250,7 @@ $currentChartType = get_setting('chart_type', 'line');
 
 <hr style="margin:40px 0 24px;border:0;border-top:1px solid #2a2e39">
 
+<!-- ================= НАСТРОЙКИ ОТОБРАЖЕНИЯ ================= -->
 <h2>Настройки отображения</h2>
 <div class="card upload-card" style="max-width: 500px;">
     <form method="post" action="<?= url('admin-settings') ?>">

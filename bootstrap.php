@@ -82,12 +82,12 @@ function db_init($pdo) {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
 
-    // Таблица для анонсов и новостей проекта
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS announcements (
             id INT AUTO_INCREMENT PRIMARY KEY,
             title VARCHAR(255) NOT NULL,
             content TEXT NOT NULL,
+            image VARCHAR(255) DEFAULT NULL,
             is_active TINYINT(1) DEFAULT 1,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
@@ -120,6 +120,14 @@ function db_init($pdo) {
         }
         if (!in_array('low', $cols)) {
             $pdo->exec("ALTER TABLE history_bars ADD COLUMN low DECIMAL(18,6) NULL AFTER high");
+        }
+    } catch (PDOException $e) {}
+
+    // Миграция для картинок в анонсах
+    try {
+        $cols = $pdo->query("SHOW COLUMNS FROM announcements")->fetchAll(PDO::FETCH_COLUMN);
+        if (!in_array('image', $cols)) {
+            $pdo->exec("ALTER TABLE announcements ADD COLUMN image VARCHAR(255) DEFAULT NULL AFTER content");
         }
     } catch (PDOException $e) {}
 
