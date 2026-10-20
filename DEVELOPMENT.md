@@ -40,9 +40,9 @@
 
 # &#x20;  - `compare` → `pages/compare.php`
 
-# &#x20;  - `admin` / `admin-login` → `pages/admin\*.php`
+# &#x20;  - `admin` / `admin-login` → `pages/admin\\\*.php`
 
-# 3\. API-запросы (`?r=api-\*`) обрабатываются в `index.php` и отдают JSON.
+# 3\. API-запросы (`?r=api-\\\*`) обрабатываются в `index.php` и отдают JSON.
 
 # 4\. Общие функции: `lib/` (хелперы, БД, настройки, новости, верификация).
 
@@ -116,7 +116,7 @@
 
 | `api-history` | `market`, `ticker`, `days`, `granularity` | OHLCV / close для основного графика |
 
-| `api-forecast` | `market`, `ticker`, `granularity` | Прогнозные линии (`lines\[]`) |
+| `api-forecast` | `market`, `ticker`, `granularity` | Прогнозные линии (`lines\\\[]`) |
 
 | `api-ma` | `market`, `ticker`, `days`, `period`, `type`, `granularity` | SMA / EMA |
 
@@ -140,51 +140,51 @@
 
 {
 
-&#x20; "line\_num": 1,
+\&#x20; "line\\\_num": 1,
 
-&#x20; "name": "Прогноз 1",
+\&#x20; "name": "Прогноз 1",
 
-&#x20; "color": "#ef5350",
+\&#x20; "color": "#ef5350",
 
-&#x20; "value\_type": "price",
+\&#x20; "value\\\_type": "price",
 
-&#x20; "computed": false,
+\&#x20; "computed": false,
 
-&#x20; "data": \[{ "time": "2026-10-01", "value": 123.45 }]
+\&#x20; "data": \\\[{ "time": "2026-10-01", "value": 123.45 }]
 
 }
 
 
 
-value\_type === "price" → левая ось.
+value\\\_type === "price" → левая ось.
 
 
 
-value\_type === "delta" → правая ось.
+value\\\_type === "delta" → правая ось.
 
 
 
-3\. Семантика delta ⚠️ зафиксировать
+3\\. Семантика delta ⚠️ зафиксировать
 
 Сейчас в stock.php для delta используется правая ось, но формула не зафиксирована. Нужно выбрать и записать:
 
 
 
-Вариант A (относительная): delta\_t = p\_t / p\_{t-1} - 1 (в % или долях).
+Вариант A (относительная): delta\\\_t = p\\\_t / p\\\_{t-1} - 1 (в % или долях).
 
 
 
-Вариант B (абсолютная): delta\_t = p\_t - p\_{t-1} (в валюте).
+Вариант B (абсолютная): delta\\\_t = p\\\_t - p\\\_{t-1} (в валюте).
 
 
 
-От этого зависит forecast\_to\_price() в lib/verify.php:
+От этого зависит forecast\\\_to\\\_price() в lib/verify.php:
 
 
 
 // Вариант A
 
-$price = $base \* (1 + $delta);
+$price = $base \\\* (1 + $delta);
 
 // Вариант B
 
@@ -194,7 +194,7 @@ $price = $base + $delta;
 
 
 
-4\. Верификация прогнозов
+4\\. Верификация прогнозов
 
 Цель
 
@@ -224,11 +224,11 @@ api-verify берёт все прогнозные линии из api-forecast.
 
 
 
-Пересчитывает delta → price (если нужно) через forecast\_to\_price().
+Пересчитывает delta → price (если нужно) через forecast\\\_to\\\_price().
 
 
 
-Считает deviation\_pct = (forecast - fact) / fact \* 100.
+Считает deviation\\\_pct = (forecast - fact) / fact \\\* 100.
 
 
 
@@ -240,47 +240,47 @@ api-verify берёт все прогнозные линии из api-forecast.
 
 {
 
-&#x20; "ok": true,
+\&#x20; "ok": true,
 
-&#x20; "lines": \[{
+\&#x20; "lines": \\\[{
 
-&#x20;   "line\_num": 1,
+\&#x20;   "line\\\_num": 1,
 
-&#x20;   "name": "Прогноз 1",
+\&#x20;   "name": "Прогноз 1",
 
-&#x20;   "color": "#ef5350",
+\&#x20;   "color": "#ef5350",
 
-&#x20;   "verify": {
+\&#x20;   "verify": {
 
-&#x20;     "mape": 3.21,
+\&#x20;     "mape": 3.21,
 
-&#x20;     "hit\_rate": 0.78,
+\&#x20;     "hit\\\_rate": 0.78,
 
-&#x20;     "count": 42,
+\&#x20;     "count": 42,
 
-&#x20;     "rows": \[{
+\&#x20;     "rows": \\\[{
 
-&#x20;       "time": "2026-09-01",
+\&#x20;       "time": "2026-09-01",
 
-&#x20;       "forecast": 123.4,
+\&#x20;       "forecast": 123.4,
 
-&#x20;       "fact": 120.1,
+\&#x20;       "fact": 120.1,
 
-&#x20;       "deviation\_pct": 2.75,
+\&#x20;       "deviation\\\_pct": 2.75,
 
-&#x20;       "status": "сбылся"
+\&#x20;       "status": "сбылся"
 
-&#x20;     }]
+\&#x20;     }]
 
-&#x20;   }
+\&#x20;   }
 
-&#x20; }]
+\&#x20; }]
 
 }
 
 Файлы
 
-lib/verify.php — forecast\_to\_price(), verify\_forecast() ⚠️ создать.
+lib/verify.php — forecast\\\_to\\\_price(), verify\\\_forecast() ⚠️ создать.
 
 
 
@@ -292,7 +292,7 @@ pages/accuracy.php — сводная страница по всем тикер�
 
 
 
-5\. База данных ⚠️ уточнить
+5\\. База данных ⚠️ уточнить
 
 Предположительная схема (сверить с lib/db.php):
 
@@ -302,11 +302,11 @@ tickers — id, market, ticker, name.
 
 
 
-prices — ticker\_id, date, open, high, low, close, volume.
+prices — ticker\\\_id, date, open, high, low, close, volume.
 
 
 
-forecasts — ticker\_id, line\_num, date, value, value\_type.
+forecasts — ticker\\\_id, line\\\_num, date, value, value\\\_type.
 
 
 
@@ -314,7 +314,7 @@ settings — key, value.
 
 
 
-users — id, login, password\_hash, is\_admin.
+users — id, login, password\\\_hash, is\\\_admin.
 
 
 
@@ -322,15 +322,15 @@ users — id, login, password\_hash, is\_admin.
 
 
 
-prices(ticker\_id, date) — уникальный.
+prices(ticker\\\_id, date) — уникальный.
 
 
 
-forecasts(ticker\_id, line\_num, date) — уникальный.
+forecasts(ticker\\\_id, line\\\_num, date) — уникальный.
 
 
 
-6\. Frontend (pages/stock.php)
+6\\. Frontend (pages/stock.php)
 
 Основные компоненты
 
@@ -364,19 +364,19 @@ style.css?v=N — cache-bust; при изменении CSS увеличиват
 
 
 
-localStorage.sf\_chart\_type — перекрывает серверный chart\_type из get\_setting().
+localStorage.sf\\\_chart\\\_type — перекрывает серверный chart\\\_type из get\\\_setting().
 
 
 
-7\. Деплой
+7\\. Деплой
 
 cd /var/www/sotis.org/data/www/forecast.sotis.org
 
 git pull
 
-\# миграции БД, если есть
+\\# миграции БД, если есть
 
-\# очистка кэша (если есть)
+\\# очистка кэша (если есть)
 
 Требования:
 
@@ -398,7 +398,7 @@ SSH-ключ для git@github.com:CAPITALOV/StockForecast-by-KAPITALOV.git.
 
 
 
-8\. Соглашения
+8\\. Соглашения
 
 Коммиты: Conventional Commits (feat:, fix:, docs:, chore:).
 
@@ -408,7 +408,7 @@ SSH-ключ для git@github.com:CAPITALOV/StockForecast-by-KAPITALOV.git.
 
 
 
-PHP: declare(strict\_types=1); ⚠️ если ещё нет — добавить.
+PHP: declare(strict\\\_types=1); ⚠️ если ещё нет — добавить.
 
 
 
@@ -420,7 +420,7 @@ CSS: переменные --bg-card, --text, --border для тем.
 
 
 
-9\. Известные задачи
+9\\. Известные задачи
 
 □ Зафиксировать семантику delta (§3).
 
@@ -428,11 +428,11 @@ CSS: переменные --bg-card, --text, --border для тем.
 
 □ Сверить схему БД (§5).
 
-□ Добавить declare(strict\_types=1) во все PHP-файлы.
+□ Добавить declare(strict\\\_types=1) во все PHP-файлы.
 
 □ Страница accuracy — сводка MAPE / hit-rate по всем тикерам.
 
-10\. Полезные ссылки
+10\\. Полезные ссылки
 
 Репозиторий: https://github.com/CAPITALOV/StockForecast-by-KAPITALOV
 
@@ -444,7 +444,8 @@ CSS: переменные --bg-card, --text, --border для тем.
 
 lightweight-charts: https://tradingview.github.io/lightweight-charts/
 
-EOF
+
+
 
 
 
