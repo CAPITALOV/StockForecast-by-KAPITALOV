@@ -1,33 +1,17 @@
-config.php
-.env
-.env.local
-*.local.php
-data/*
-!data/.gitignore
-!data/.htaccess
-!data/.gitkeep
-.tmp-prep/
-stock-forecast/
-webstat/
-webstat.off/
-cgi-bin/
-.config/
-composer.phar
-composer.json
-*.log
-*.log.*
-*.tmp
-*.cache
-error_log
-php_error.log
-.idea/
-.vscode/
-*.sublime-*
-*.swp
-*.swo
-.DS_Store
-Thumbs.db
-desktop.ini
+# Лишние варианты Inter — используется только InterVariable.woff2
+static/fonts/*
+!static/fonts/InterVariable.woff2
+
+# Дубликаты иконок от favicon.io
+favicon_io/
+
+# Бэкапы
 *.bak
-*.orig
 *~
+
+# Конфиг с секретами
+config.php
+
+# Кэши и логи
+data/*.json
+data/*.log
