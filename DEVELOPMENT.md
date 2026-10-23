@@ -31,7 +31,7 @@ API-запросы (`?r=api-*`) обрабатываются в `index.php` и �
 - `config.example.php` — шаблон конфига
 - `pages/` — home, stock, news, screener, accuracy, compare, admin
 - `lib/api.php` — загрузка истории (MOEX ISS, Yahoo, Stooq)
-- `lib/verify.php` — `forecast_to_price()`, `verify_forecast()` (cumprod)
+- `lib/verify.php` — `forecast_to_price()`, `verify_forecast()`
 - `lib/screener.php` — `screener_data()`
 - `lib/news.php` — `get_financial_news()`
 - `lib/settings.php` — `get_setting()` / `set_setting()`
@@ -53,7 +53,7 @@ Backend: PHP 7.4+ (без фреймворка), PDO/MySQL 5.7+ / MariaDB 10.3+.
 
 Frontend, основной график: amCharts 5 Stock Chart (`index.js`, `xy.js`, `stock.js`, `plugins/exporting.js`, темы `Animated` + `Dark`) — CDN `cdn.amcharts.com`.
 
-Frontend, нижняя панель и сравнение: lightweight-charts 4.1.0 (CDN `unpkg.com`) — POC, см. §6.
+Frontend, нижняя панель и сравнение: amCharts 5 (RSI, MACD встроены, сравнение на `XYChart`).
 
 Шрифт: Inter Variable, локальный (`static/fonts/InterVariable.woff2`), подключён через `@font-face` в `style.css` и `preload` в `<head>`. Google Fonts не используется.
 
@@ -61,7 +61,7 @@ Frontend, нижняя панель и сравнение: lightweight-charts 4.
 
 Графики: свечи/линии (amCharts), RSI(14), MACD, Bollinger, SMA/EMA, прогнозные линии; сглаживание `tension: 0.8`; рендер SVG/canvas.
 
-Экспорт: CSV (server-side), PNG (amCharts `am5plugins_exporting`) и PNG нижней панели (lightweight-charts).
+Экспорт: CSV (server-side), PNG (amCharts `am5plugins_exporting`).
 
 ## 2. API-эндпоинты
 
@@ -84,88 +84,87 @@ Frontend, нижняя панель и сравнение: lightweight-charts 4.
 - `value_type: "price"` — левая ось
 - `value_type: "delta"` — правая ось
 
-## 3. Семантика delta (зафиксирована)
+## 3. Семантика delta
 
 Вариант A — относительная дельта с восстановлением через cumprod (реализовано с v1.2).
 
-Прогноз хранится как относительное изменение: `delta_t = p_t / p_{t-1} - 1`.
+Прогноз хранится как относительное изменение: `delta_t = p_t / p_{t-1} - 1` (в процентах).
 
-Восстановление цены из delta — накопленное произведение: `p_t = p_0 * ∏(1 + delta_i)` для `i` от 1 до `t`.
+Восстановление цены из delta — накопленное произведение: `p_t = p_0 * ∏(1 + delta_i / 100)` для `i` от 1 до `t`.
 
 `p_0` — последняя фактическая цена на дату начала прогноза.
 
-Реализация — `lib/verify.php`, функция `forecast_to_price()`. Эта семантика используется и в верификации, и для отображения delta-линий на правой оси.
+Реализация — `lib/verify.php`, функция `forecast_to_price()`.
 
-## 4. Верификация прогнозов (реализована)
+## 4. Верификация прогнозов (v1.24.0)
 
-### Что считается
+### Логика проверки (Правило 50%)
 
-- MAPE — средняя абсолютная процентная ошибка
-- Hit-rate — доля точек, где |отклонение| в пределах порога «сбылся» (≤ 2%)
-- Статус по каждой точке: «сбылся» при |deviation| ≤ 2%, «частично» при 2% < |deviation| ≤ 5%, «не сбылся» при |deviation| > 5%
+Функция `verify_forecast($market, $ticker, $points, $value_type)` анализирует окно от -90 дней до +90 дней от последней даты истории.
 
-### Схема
+Для прошедших дат (где есть факт):
 
-1. `api-verify` берёт все прогнозные линии из `api-forecast`
-2. Для каждой точки прогноза ищет фактическую цену на ту же дату в `history_bars`
-3. Пересчитывает `delta` в `price` через `forecast_to_price()` (cumprod, §3)
-4. Считает `deviation_pct = (forecast - fact) / fact * 100`
-5. Определяет `status` по порогам выше
-6. Возвращает JSON: `{ ok: true, lines: [{ line_num, name, color, verify: { mape, hit_rate, count, rows: [{ time, forecast, fact, deviation_pct, status }] } }] }`
+1. Считается изменение факта (`actual_delta`) и прогноза (`forecast_delta`).
+2. Проверяется направление: оба > 0 или оба < 0.
+3. Проверяется амплитуда: `abs(actual_delta) >= abs(forecast_delta) * 0.5`.
+4. Если оба условия выполнены — статус `сбылся (успех)`. Если только первое — `частично (слабый)`. Иначе — `не сбылся (убыток)`.
 
-### Файлы
+### Метрики
 
-- `lib/verify.php` — `forecast_to_price()`, `verify_forecast()`
-- `pages/stock.php` — `loadVerification()` / `renderVerification()`
-- `pages/accuracy.php` — сводная страница
-- `lib/screener.php` — `screener_data()` для screener'а
+- Hit-rate — доля успешных векторов.
+- Pearson — корреляция Пирсона между прогнозной ценой и фактом.
+
+### Формат ответа `api-verify`
+
+Каждая линия содержит `verify: { rows: [...], hit_rate, pearson, count }`.
+Внутри `rows` передаются: `time`, `delta` (сырое значение из базы), `forecast`, `fact`, `deviation_pct`, `status`.
 
 ## 5. База данных
 
-- `history_bars` — `ticker_id`, `date`, `open`, `high`, `low`, `close`, `volume`. Уникальный `(ticker_id, date)`. Миграция — `bootstrap.php` (v1.19)
-- `forecasts` — `ticker_id`, `line_num`, `date`, `value`, `value_type`. Уникальный `(ticker_id, line_num, date)`
-- `tickers` — `id`, `market`, `ticker`, `name`
-- `settings` — `key`, `value` (v1.19; тип графика по умолчанию и др.)
-- `announcements` — новости/анонсы, с колонкой `image` (v1.20)
-- `users` — `id`, `login`, `password_hash`, `is_admin`
+- `history_bars` — `ticker_id`, `date`, `open`, `high`, `low`, `close`, `volume`. Уникальный `(ticker_id, date)`.
+- `forecasts` — `ticker_id`, `line_num`, `date`, `value`, `value_type`. Уникальный `(ticker_id, line_num, date)`.
+- `tickers` — `id`, `market`, `ticker`, `name`.
+- `settings` — `key`, `value`.
+- `announcements` — новости/анонсы, с колонкой `image`.
+- `users` — `id`, `login`, `password_hash`, `is_admin`.
 
 Кэши вне БД: `data/news_cache.json` — новости, TTL 15 минут.
 
 ## 6. Frontend (pages/stock.php)
 
-### Стек графиков
+### Основной график
 
-Основной график — amCharts 5 Stock Chart (`am5stock.StockChart`, `StockPanel`, `CandlestickSeries`, `SmoothedXLineSeries`, `LineSeries`).
+- `am5stock.StockChart` с одной панелью.
+- Сглаживание `tension: 0.8`.
+- Рендер: SVG при `days ≤ 365`, canvas при больших периодах.
 
-- Сглаживание: `tension: 0.8` для линий цены и прогнозов
-- Рендер: SVG при `days ≤ 365`, canvas при больших периодах (`pickRenderer(days)`)
-- Тултипы, легенда, экспорт PNG — встроенные средствами amCharts (`plugins/exporting.js`, `am5plugins_exporting.Exporting`)
-- Прогнозные линии: `value_type: delta` — правая ось, `price` — левая
-- Тема: `am5themes_Animated` + `am5themes_Dark` при тёмной теме; при переключении темы график пересоздаётся
-- Шрифт: `amRoot.fontFamily = "Inter, ..."` — единый с сайтом
-- Лицензия: linkware — на графике видна атрибуция amCharts
+### Нижняя панель
 
-Нижняя панель (RSI/MACD) — lightweight-charts 4.1.0 (POC; синхронизация с основным графиком отсутствует, планируется перенос на amCharts — Этап 2).
+Используются встроенные индикаторы `am5stock.RelativeStrengthIndex` и `am5stock.MACD`. Они автоматически синхронизируются с основным графиком по зуму и курсору. Кнопка «Панель» скрывает/показывает панель через `visible`.
 
-Сравнение моделей — lightweight-charts (POC).
+### Блок «Сравнение моделей» (Двухосевой)
 
-Верификация — HTML-таблица (`renderVerification()`), без изменений.
+Используется `am5xy.XYChart`.
+
+- Левая ось: `valueAxisDelta` (сырые значения дельт).
+- Правая ось: `valueAxisPrice` (реальная цена).
+
+Фактическая цена (зеленая линия) привязана к правой оси. Прогнозные линии (красная, оранжевая) — к левой.
+
+### Визуальные маркеры (bullets)
+
+Для каждой точки прогноза на двухосевом графике добавляется маркер:
+
+- Перед отрисовкой данные прогноза обогащаются полем `status` из `api-verify` (с использованием `normalizeDate` без учета часовых поясов).
+- В `series.bullets` читается `dataItem.dataContext.status`.
+- Цвета: `сбылся` — зеленый, `не сбылся` — красный, `частично` — оранжевый, `ожидается` — невидимая точка (`radius: 0`).
 
 ### Типографика
 
-- Шрифт: Inter Variable, self-hosted (`static/fonts/InterVariable.woff2`), подключён через `@font-face` в `style.css` и `preload` в `<head>`. Никаких запросов к Google Fonts
-- Сглаживание: `-webkit-font-smoothing: antialiased`, `-moz-osx-font-smoothing: grayscale`, `text-rendering: optimizeLegibility` на `body`
-- Цифры: `font-variant-numeric: tabular-nums` на `.stock-table`, `.chart-tooltip`, `.legend`, `.hero-stats .stat b` — цены выровнены по разрядам
-- Иконки: inline SVG в `stock.php` (логотип, тема, панель, скачивание), классы `.icon` и `.icon-only` в `style.css`. Emoji не используются для UI-иконок (только декоративные иконки новостей)
-
-### Важные нюансы
-
-- `am5.Root` создаётся заново при каждом `loadAll()` (смена периода, `granularity`, типа графика, темы). `destroyCharts()` вызывает `amRoot.dispose()`
-- `applyOptions({ width })` у lightweight-charts нельзя вызывать при `clientWidth === 0` — защита стоит в `toggle-lower` и `window.resize` (v1.20.1)
-- `destroyCharts()` перед каждым рендером — иначе верификация пропадает при смене типа графика (фикс v1.19)
-- `style.css?v=N` — cache-bust; при изменении CSS увеличивать N (актуально `v=4` с v1.21.0)
-- `localStorage.sf_chart_type` — перекрывает серверный `chart_type` из `get_setting()`
-- Даты для amCharts — timestamp в миллисекундах (`toTs()`), для lightweight — строка `YYYY-MM-DD`
+- Шрифт: Inter Variable, self-hosted (`static/fonts/InterVariable.woff2`).
+- Сглаживание: `-webkit-font-smoothing: antialiased`.
+- Цифры: `font-variant-numeric: tabular-nums` для ровных столбцов.
+- Иконки: inline SVG.
 
 ## 7. Деплой
 
@@ -181,12 +180,11 @@ Frontend, нижняя панель и сравнение: lightweight-charts 4.
 - PHP 7.4+, MySQL 5.7+ / MariaDB 10.3+
 - Расширения: `pdo_mysql`, `mbstring`, `curl`, `fileinfo`
 - Права на `data/` и `static/uploads/` — 775, владелец = PHP-процесс
-- Права на `static/fonts/` и `*.woff2` — 644 (читается веб-сервером)
+- Права на `static/fonts/` и `*.woff2` — 644
 - SSH-ключ для `git@github.com:CAPITALOV/StockForecast-by-KAPITALOV.git`
-- Исходящие запросы к `iss.moex.com`, `query1.finance.yahoo.com`, `stooq.com`
-- Клиентские CDN: `unpkg.com` (lightweight-charts), `cdn.amcharts.com` (amCharts 5). Шрифт локальный, без CDN
+- Клиентские CDN: `unpkg.com`, `cdn.amcharts.com`
 
-Ветка `main` защищена: force-push запрещён. Только fast-forward / rebase + push.
+Ветка `main` защищена: force-push запрещён.
 
 ## 8. Соглашения
 
@@ -206,19 +204,21 @@ Frontend, нижняя панель и сравнение: lightweight-charts 4.
 - Миграция `history_bars` с OHLC (v1.19)
 - Миграция `announcements.image` (v1.20)
 - Исправить таймауты Yahoo/Stooq в `lib/api.php` (504)
-- Основной график на amCharts 5 Stock Chart (v1.21.0, §6)
+- Основной график на amCharts 5 Stock Chart (v1.21.0)
 - Экспорт PNG на amCharts через `am5plugins_exporting` (v1.21.0)
-- Self-hosted Inter Variable + preload, без Google Fonts (v1.21.0)
-- SVG-иконки в UI + tabular-nums для цифр (v1.21.0)
+- Self-hosted Inter Variable + preload (v1.21.0)
+- SVG-иконки в UI + tabular-nums (v1.21.0)
+- Этап 2: перенос RSI/MACD на `StockPanel` с нативной синхронизацией (v1.23.0)
+- Этап 3: двухосевой график сравнения Delta + Price (v1.23.0)
+- Логика верификации «Правило 50%» + Корреляция Пирсона (v1.23.0)
+- Визуальные маркеры статусов на графике сравнения + колонка Дельта (v1.24.0)
 
 Осталось:
 
-- Этап 2: перенести RSI/MACD на `StockPanel` с нативной синхронизацией зума и курсора
-- Этап 3: перенести блок «Сравнение моделей» на amCharts
 - Легенда amCharts показывает `(0)` — счётчик точек не обновляется после `data.setAll()` (косметика)
 - Тултип amCharts показывает много знаков после запятой у некоторых серий — обрезать до 2 знаков
-- Экспорт PNG сохраняет только основной график (без нижней панели) — после Этапа 2 можно будет экспортировать весь дашборд
-- Добавить `<meta name="description">` и Open Graph на главную (превью при шаринге в Telegram/Twitter)
+- Экспорт PNG сохраняет только основной график (без нижней панели)
+- Добавить `<meta name="description">` и Open Graph на главную
 - `declare(strict_types=1)` во всех PHP-файлах
 - Сверить `pages/accuracy.php` с текущим форматом `api-verify`
 - Документировать `cron/` в §7 (расписание задач)
