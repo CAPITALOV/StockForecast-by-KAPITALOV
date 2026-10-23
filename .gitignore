@@ -15,3 +15,7 @@ config.php
 # Кэши и логи
 data/*.json
 data/*.log
+.config/
+composer.json
+composer.phar
+webstat/
