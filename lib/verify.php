@@ -1,170 +1,143 @@
 <?php
-function last_close_before($stockId, $date) {
-    if ($stockId === null) return null;
-    $stmt = db()->prepare(
-        "SELECT close FROM history_bars
-         WHERE stock_id = ? AND ts <= ? ORDER BY ts DESC LIMIT 1"
-    );
-    $stmt->execute([$stockId, $date]);
-    $v = $stmt->fetchColumn();
-    return $v !== false ? (float)$v : null;
-}
+// lib/verify.php
 
-function forecast_to_price(array $points, string $type, ?float $basePrice): array {
-    if (empty($points)) return [];
-    if ($type === 'price') return $points;
-    if ($basePrice === null || $basePrice <= 0) return [];
-    $out = [];
-    $price = $basePrice;
-    foreach ($points as $p) {
-        $price *= (1.0 + (float)$p['value']);
-        $out[] = ['time' => $p['time'], 'value' => $price];
+function verify_forecast($market, $ticker, $points, $value_type) {
+    // 1. Получаем историю цен за последние 10 лет (или сколько есть)
+    $history_bars = [];
+    try {
+        $res = history_get($market, $ticker, 3650, 'auto');
+        $history_bars = $res['data'] ?? [];
+    } catch (Throwable $e) {}
+
+    if (empty($history_bars) || empty($points)) {
+        return ['rows' => [], 'mape' => null, 'hit_rate' => null, 'pearson' => null, 'count' => 0];
     }
-    return $out;
-}
 
-function verify_forecast(string $market, string $ticker, array $points, string $type): array {
-    $empty = ['rows' => [], 'mape' => null, 'hit_rate' => null, 'count' => 0, 'base_price' => null];
-    $stockId = stock_id_by_ticker($market, $ticker);
-    if ($stockId === null || empty($points)) return $empty;
-    $firstDate = $points[0]['time'];
-    $basePrice = last_close_before($stockId, $firstDate);
-    $priced    = forecast_to_price($points, $type, $basePrice);
-    if (empty($priced)) return $empty;
-
-    $first = $priced[0]['time'];
-    $last  = $priced[count($priced) - 1]['time'];
-    $stmt = db()->prepare(
-        "SELECT ts, close FROM history_bars
-         WHERE stock_id = ? AND ts BETWEEN ? AND ? ORDER BY ts"
-    );
-    $stmt->execute([$stockId, $first, $last]);
-    $facts = [];
-    foreach ($stmt->fetchAll() as $r) {
-        $facts[$r['ts']] = (float)$r['close'];
+    // 2. Карта фактических цен (date => value)
+    $actual_map = [];
+    foreach ($history_bars as $bar) {
+        $actual_map[$bar['time']] = (float)$bar['value'];
     }
+    
+    $last_history_date = end($history_bars)['time'];
+
+    // Окно: -90 дней до конца истории, +90 дней после
+    $limit_past = date('Y-m-d', strtotime($last_history_date . ' -90 days'));
+    $limit_future = date('Y-m-d', strtotime($last_history_date . ' +90 days'));
 
     $rows = [];
-    $sumAbsPct = 0.0; $n = 0; $hit = 0;
-    $prevFact = $basePrice;
-    foreach ($priced as $p) {
+    $count_verified = 0;
+    $hits = 0;
+    $sum_abs_dev = 0;
+    
+    $forecast_arr = [];
+    $actual_arr = [];
+
+    // Базовая цена (находим цену за день ДО начала прогноза)
+    $base_price = (float)$history_bars[0]['value'];
+    $first_forecast_date = $points[0]['time'] ?? null;
+    
+    if ($first_forecast_date) {
+        foreach ($history_bars as $bar) {
+            if ($bar['time'] < $first_forecast_date) {
+                $base_price = (float)$bar['value'];
+            } else {
+                break;
+            }
+        }
+    }
+
+    $current_forecast_price = $base_price;
+    $prev_actual_price = $base_price;
+
+    foreach ($points as $p) {
         $date = $p['time'];
-        if (!isset($facts[$date])) continue;
-        $forecastPrice = (float)$p['value'];
-        $factPrice     = $facts[$date];
-        $dev = $factPrice != 0.0
-            ? (($forecastPrice - $factPrice) / $factPrice) * 100.0
-            : null;
-        $dirF = $forecastPrice > ($prevFact ?? $basePrice) ? 1 : -1;
-        $dirT = $factPrice     > ($prevFact ?? $basePrice) ? 1 : -1;
-        if ($dirF === $dirT) $hit++;
-        $status = '—';
-        if ($dev !== null) {
-            $a = abs($dev);
-            if ($a <= 2.0)     $status = 'сбылся';
-            elseif ($a <= 5.0) $status = 'частично';
-            else               $status = 'не сбылся';
+        $val = (float)$p['value'];
+
+        // Ограничиваем окно +/- 90 дней от конца истории
+        if ($date < $limit_past || $date > $limit_future) {
+            continue;
         }
+
+        // Пересчитываем прогнозную цену из дельты (сложный процент)
+        if ($value_type === 'delta') {
+            $current_forecast_price = $current_forecast_price * (1 + $val / 100);
+            $forecast_price = $current_forecast_price;
+        } else {
+            $forecast_price = $val;
+        }
+
+        $status = 'ожидается';
+        $fact = null;
+        $deviation = null;
+
+        if (isset($actual_map[$date])) {
+            $fact = $actual_map[$date];
+            $deviation = (($forecast_price - $fact) / $fact) * 100;
+            $abs_dev = abs($deviation);
+            
+            $actual_delta = (($fact - $prev_actual_price) / $prev_actual_price) * 100;
+            $forecast_delta = $val;
+
+            // Векторный анализ (правило 50%)
+            $same_direction = ($actual_delta > 0 && $forecast_delta > 0) || ($actual_delta < 0 && $forecast_delta < 0);
+            $achieved_half = abs($actual_delta) >= abs($forecast_delta) * 0.5;
+
+            if ($same_direction && $achieved_half) {
+                $status = 'сбылся (успех)';
+                $hits++;
+            } elseif ($same_direction) {
+                $status = 'частично (слабый)';
+            } else {
+                $status = 'не сбылся (убыток)';
+            }
+
+            $count_verified++;
+            $sum_abs_dev += $abs_dev;
+            
+            $forecast_arr[] = $forecast_price;
+            $actual_arr[] = $fact;
+
+            $prev_actual_price = $fact;
+        }
+
         $rows[] = [
-            'time'          => $date,
-            'forecast'      => round($forecastPrice, 4),
-            'fact'          => round($factPrice, 4),
-            'deviation_pct' => $dev !== null ? round($dev, 2) : null,
-            'status'        => $status,
+            'time' => $date,
+            'delta' => round($val, 4),
+            'forecast' => round($forecast_price, 2),
+            'fact' => $fact !== null ? round($fact, 2) : null,
+            'deviation_pct' => $deviation !== null ? round($deviation, 2) : null,
+            'status' => $status
         ];
-        if ($dev !== null) { $sumAbsPct += abs($dev); $n++; }
-        $prevFact = $factPrice;
     }
+
+    // Корреляция Пирсона
+    $pearson = null;
+    if ($count_verified > 2) {
+        $n = $count_verified;
+        $sum_x = array_sum($forecast_arr);
+        $sum_y = array_sum($actual_arr);
+        $sum_xy = 0; $sum_x2 = 0; $sum_y2 = 0;
+        
+        for ($i = 0; $i < $n; $i++) {
+            $sum_xy += $forecast_arr[$i] * $actual_arr[$i];
+            $sum_x2 += pow($forecast_arr[$i], 2);
+            $sum_y2 += pow($actual_arr[$i], 2);
+        }
+        
+        $num = ($n * $sum_xy) - ($sum_x * $sum_y);
+        $den = sqrt(($n * $sum_x2 - pow($sum_x, 2)) * ($n * $sum_y2 - pow($sum_y, 2)));
+        
+        if ($den != 0) {
+            $pearson = round($num / $den, 2);
+        }
+    }
+
     return [
-        'rows'       => $rows,
-        'mape'       => $n > 0 ? round($sumAbsPct / $n, 2) : null,
-        'hit_rate'   => $n > 0 ? round($hit / $n, 4) : null,
-        'count'      => $n,
-        'base_price' => $basePrice,
+        'rows' => $rows,
+        'mape' => $count_verified > 0 ? round($sum_abs_dev / $count_verified, 2) : null,
+        'hit_rate' => $count_verified > 0 ? $hits / $count_verified : null,
+        'pearson' => $pearson,
+        'count' => $count_verified
     ];
-}
-
-function content_has_dates_in_range(string $content, string $from, string $to): bool {
-    $fromMonth = substr($from, 0, 7);
-    $toMonth   = substr($to, 0, 7);
-    if (strpos($content, $fromMonth) !== false) return true;
-    if (strpos($content, $toMonth) !== false) return true;
-    $fromDayMonth = substr($from, 8, 2) . ' ' . substr($from, 5, 2);
-    $toDayMonth   = substr($to, 8, 2)   . ' ' . substr($to, 5, 2);
-    if (strpos($content, $fromDayMonth) !== false) return true;
-    if (strpos($content, $toDayMonth) !== false) return true;
-    return false;
-}
-
-function recent_hits(int $days = 7, float $maxDevPct = 2.0, int $limit = 10, bool $forceRefresh = false): array {
-    $cacheFile = __DIR__ . '/../data/recent_hits_cache.json';
-    $lockFile  = __DIR__ . '/../data/recent_hits.lock';
-    $ttl = 300;
-
-    if (!$forceRefresh && is_file($cacheFile) && (time() - filemtime($cacheFile) < $ttl)) {
-        $j = json_decode(file_get_contents($cacheFile), true);
-        if (is_array($j)) return $j;
-    }
-
-    $lock = @fopen($lockFile, 'c');
-    if (!$lock || !flock($lock, LOCK_EX | LOCK_NB)) {
-        if (is_file($cacheFile)) {
-            $j = json_decode(file_get_contents($cacheFile), true);
-            if (is_array($j)) return $j;
-        }
-        return [];
-    }
-
-    $startTime = microtime(true);
-    $budget    = 8.0;
-
-    $from = date('Y-m-d', time() - $days * 86400);
-    $to   = date('Y-m-d');
-
-    $rows = db()->query(
-        "SELECT market, ticker, line_num, value_type, content
-         FROM forecast_lines"
-    )->fetchAll();
-
-    $hits = [];
-    $checked = 0;
-    foreach ($rows as $r) {
-        if (microtime(true) - $startTime > $budget) break;
-        if (!content_has_dates_in_range($r['content'], $from, $to)) continue;
-
-        $points = parse_forecast($r['content']);
-        if (empty($points)) continue;
-
-        $v = verify_forecast($r['market'], $r['ticker'], $points, $r['value_type']);
-        foreach ($v['rows'] as $row) {
-            if ($row['time'] < $from || $row['time'] > $to) continue;
-            if ($row['status'] !== 'сбылся') continue;
-            if ($row['deviation_pct'] === null) continue;
-            if (abs($row['deviation_pct']) > $maxDevPct) continue;
-            $hits[] = [
-                'market'        => $r['market'],
-                'ticker'        => $r['ticker'],
-                'line_num'      => (int)$r['line_num'],
-                'time'          => $row['time'],
-                'forecast'      => $row['forecast'],
-                'fact'          => $row['fact'],
-                'deviation_pct' => $row['deviation_pct'],
-            ];
-        }
-        $checked++;
-        if ($checked >= 100) break;
-    }
-
-    usort($hits, function ($a, $b) {
-        if ($a['time'] !== $b['time']) return strcmp($b['time'], $a['time']);
-        return abs($a['deviation_pct']) <=> abs($b['deviation_pct']);
-    });
-    $hits = array_slice($hits, 0, $limit);
-
-    @file_put_contents($cacheFile, json_encode($hits, JSON_UNESCAPED_UNICODE));
-
-    flock($lock, LOCK_UN);
-    fclose($lock);
-
-    return $hits;
 }

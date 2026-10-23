@@ -15,7 +15,7 @@ $defaultChartType = get_setting('chart_type', 'line');
 <title><?= h($ticker) ?> — прогноз и верификация</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="preload" href="static/fonts/InterVariable.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="static/style.css?v=4">
+<link rel="stylesheet" href="static/style.css?v=19">
 </head>
 <body>
 <header class="topbar">
@@ -130,15 +130,13 @@ $defaultChartType = get_setting('chart_type', 'line');
     <span id="status" class="status"></span>
 </div>
 
-<div id="chart" class="chart" style="height:480px"></div>
+<div id="chart" class="chart" style="height:520px"></div>
 <div id="main-legend" class="legend" style="display:none"></div>
 
 <div class="rsi-head">
     <b id="lower-title">RSI(<?= (int)$rsiPeriod ?>)</b>
-    <span class="muted" id="lower-subtitle">— индикатор (не прогноз). Уровни 70 / 30 — перекупленность / перепроданность.</span>
+    <span class="muted" id="lower-subtitle">— индикатор (не прогноз).</span>
 </div>
-<div id="rsi-chart" class="rsi-chart"></div>
-<div id="rsi-legend" class="legend"><span class="muted">Загрузка…</span></div>
 
 <h2 style="margin-top:48px">Верификация прогнозов</h2>
 <p class="muted">Наведите курсор на график — увидите прогноз, факт, отклонение и статус по каждой точке.</p>
@@ -146,11 +144,10 @@ $defaultChartType = get_setting('chart_type', 'line');
 
 <section class="section" style="margin-top:48px">
     <div class="section-head">
-        <h2>Сравнение моделей прогноза</h2>
-        <p class="muted">Все три линии на одном графике (нормализованы к 100 на начальную дату).</p>
+        <h2>Сравнение моделей прогноза (Дельта и Цена)</h2>
+        <p class="muted">Сырые значения дельт (левая ось) наложены на реальную цену закрытия (правая ось). Цветные точки показывают статус прогноза.</p>
     </div>
-    <div id="compare-forecasts-chart" class="chart" style="height:360px"></div>
-    <div id="compare-forecasts-legend" class="legend"></div>
+    <div id="compare-forecasts-chart" class="chart" style="height:380px"></div>
 </section>
 
 <?php if (!empty($news)): ?>
@@ -188,7 +185,7 @@ $defaultChartType = get_setting('chart_type', 'line');
 </section>
 <?php endif; ?>
 
-<script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+<!-- amCharts 5: core + xy + stock + exporting (plugins!) + темы -->
 <script src="https://cdn.amcharts.com/lib/5/index.js"></script>
 <script src="https://cdn.amcharts.com/lib/5/xy.js"></script>
 <script src="https://cdn.amcharts.com/lib/5/stock.js"></script>
@@ -205,7 +202,6 @@ const MA_COLOR  = '#ffd54f';
 const BB_COLOR  = '#64b5f6';
 
 const chartEl    = document.getElementById('chart');
-const rsiChartEl = document.getElementById('rsi-chart');
 const statusEl   = document.getElementById('status');
 const maHintEl   = document.getElementById('ma-hint');
 
@@ -223,11 +219,11 @@ let forecastSeries = [];
 let maSeries = null;
 let bbSeries = [];
 
-let rsiChart = null, compareForecastsChart = null, rsiSeries = null;
-let macdSeries = [];
-
+let lowerIndicator = null;
 let forecastLinesData = null, verifyData = null;
-const legendState = { price: 0, lines: [], ma: null, bb: null, lower: 0 };
+
+let globalMinDate = 0;
+let globalMaxDate = 0;
 
 function getColors() {
     const s = getComputedStyle(document.body);
@@ -259,26 +255,30 @@ function toTs(timeStr) {
     return new Date(timeStr + 'T00:00:00Z').getTime();
 }
 
+function normalizeDate(timeStr) {
+    if (!timeStr) return '';
+    if (typeof timeStr === 'string') return timeStr.slice(0, 10);
+    if (typeof timeStr === 'number') return new Date(timeStr).toISOString().slice(0, 10);
+    return '';
+}
+
 function showSkeleton() {
     chartEl.innerHTML = '<div class="chart-loading"><div class="skeleton skeleton-block"></div><div class="skeleton skeleton-line short"></div></div>';
-    rsiChartEl.innerHTML = '<div class="chart-loading"><div class="skeleton" style="height:120px;width:100%"></div></div>';
 }
 function hideSkeleton() {
     const a = chartEl.querySelector('.chart-loading'); if (a) a.remove();
-    const b = rsiChartEl.querySelector('.chart-loading'); if (b) b.remove();
 }
 
 function destroyCharts() {
     if (amRoot) { try { amRoot.dispose(); } catch(e){} amRoot = null; }
     stockChart = null; mainPanel = null; dateAxis = null; valueAxis = null; valueAxisRight = null;
     priceSeries = null; forecastSeries = []; maSeries = null; bbSeries = [];
-
-    if (rsiChart) { try { rsiChart.remove(); } catch(e){} rsiChart = null; }
-    if (compareForecastsChart) { try { compareForecastsChart.remove(); } catch(e){} compareForecastsChart = null; }
-    rsiSeries = null; macdSeries = [];
+    lowerIndicator = null;
+    
+    const cmpEl = document.getElementById('compare-forecasts-chart');
+    if (cmpEl) cmpEl.innerHTML = '';
 
     chartEl.innerHTML = '';
-    rsiChartEl.innerHTML = '';
 }
 
 function initAmChart(days, granularity) {
@@ -303,16 +303,20 @@ function initAmChart(days, granularity) {
         })
     );
 
+    const valueAxisRenderer = am5xy.AxisRendererY.new(amRoot, {});
+    valueAxisRenderer.labels.template.setAll({ fontSize: 12, fill: am5.color(isDarkTheme() ? "#d1d4dc" : "#333333") });
     valueAxis = mainPanel.yAxes.push(
         am5xy.ValueAxis.new(amRoot, {
-            renderer: am5xy.AxisRendererY.new(amRoot, {}),
+            renderer: valueAxisRenderer,
         })
     );
 
+    const dateAxisRenderer = am5xy.AxisRendererX.new(amRoot, {});
+    dateAxisRenderer.labels.template.setAll({ fontSize: 12, fill: am5.color(isDarkTheme() ? "#d1d4dc" : "#333333") });
     dateAxis = mainPanel.xAxes.push(
         am5xy.DateAxis.new(amRoot, {
             baseInterval: granularityToBaseInterval(granularity),
-            renderer: am5xy.AxisRendererX.new(amRoot, {}),
+            renderer: dateAxisRenderer,
         })
     );
 
@@ -384,9 +388,11 @@ function renderPriceSeries(historyData, type) {
 
 function getRightAxis() {
     if (valueAxisRight) return valueAxisRight;
+    const renderer = am5xy.AxisRendererY.new(amRoot, { opposite: true });
+    renderer.labels.template.setAll({ fontSize: 12, fill: am5.color(isDarkTheme() ? "#d1d4dc" : "#333333") });
     valueAxisRight = mainPanel.yAxes.push(
         am5xy.ValueAxis.new(amRoot, {
-            renderer: am5xy.AxisRendererY.new(amRoot, { opposite: true }),
+            renderer: renderer,
         })
     );
     return valueAxisRight;
@@ -399,6 +405,7 @@ function renderForecastLines(lines) {
 
     lines.forEach(line => {
         if (!line.data || !line.data.length) return;
+
         const yAxis = line.value_type === 'delta' ? getRightAxis() : valueAxis;
 
         const s = mainPanel.series.push(
@@ -422,41 +429,66 @@ function renderForecastLines(lines) {
     });
 }
 
-function chartOptionsLw() {
-    const c = getColors();
-    return {
-        layout: { background: { color: c.bg }, textColor: c.text },
-        grid: { vertLines: { color: c.border }, horzLines: { color: c.border } },
-        crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
-        leftPriceScale:  { visible: true, borderColor: c.border, scaleMargins: { top: 0.1, bottom: 0.1 } },
-        rightPriceScale: { visible: true, borderColor: c.border, scaleMargins: { top: 0.1, bottom: 0.1 } },
-        timeScale: { borderColor: c.border, visible: true },
-    };
+/* ================= Нижняя панель (Этап 2) ================= */
+
+async function loadLowerPanel() {
+    if (!stockChart || !priceSeries) return;
+    const panelType = document.getElementById('lower-panel').value;
+
+    if (lowerIndicator) { 
+        stockChart.indicators.removeValue(lowerIndicator); 
+        lowerIndicator.dispose(); 
+        lowerIndicator = null; 
+    }
+
+    document.getElementById('lower-title').textContent = panelType === 'rsi' ? 'RSI(' + RSI_PERIOD + ')' : 'MACD(12,26,9)';
+    document.getElementById('lower-subtitle').textContent = panelType === 'rsi' 
+        ? '— индикатор (не прогноз). Уровни 70 / 30 — перекупленность / перепроданность.'
+        : '— разница EMA(12) и EMA(26), сглаженная EMA(9).';
+
+    if (panelType === 'rsi') {
+        lowerIndicator = stockChart.indicators.push(
+            am5stock.RelativeStrengthIndex.new(amRoot, {
+                stockChart: stockChart,
+                stockSeries: priceSeries,
+                period: RSI_PERIOD
+            })
+        );
+        try {
+            const rsiPanel = lowerIndicator.panel;
+            if (rsiPanel) {
+                rsiPanel.yAxes.values.forEach(axis => {
+                    if (axis.get("renderer")) {
+                        axis.get("renderer").labels.template.setAll({ fontSize: 12, fill: am5.color(isDarkTheme() ? "#d1d4dc" : "#333333") });
+                    }
+                });
+            }
+            lowerIndicator.get("series").values[0].set("stroke", am5.color(RSI_COLOR));
+        } catch(e) {}
+    } else {
+        lowerIndicator = stockChart.indicators.push(
+            am5stock.MACD.new(amRoot, {
+                stockChart: stockChart,
+                stockSeries: priceSeries,
+                fastPeriod: 12,
+                slowPeriod: 26,
+                signalPeriod: 9
+            })
+        );
+    }
+
+    if (document.body.classList.contains('hide-lower') && lowerIndicator.panel) {
+        lowerIndicator.panel.set("visible", false);
+    }
 }
 
-function initRsiChart() {
-    const opts = chartOptionsLw();
-    rsiChart = LightweightCharts.createChart(rsiChartEl, Object.assign({}, opts, {
-        width: rsiChartEl.clientWidth, height: 160
-    }));
-    window.rsiChart = rsiChart;
-
-    rsiSeries = rsiChart.addLineSeries({
-        color: RSI_COLOR, lineWidth: 2, title: 'RSI(' + RSI_PERIOD + ')',
-        priceLineVisible: false, lastValueVisible: true,
-    });
-    try {
-        rsiSeries.createPriceLine({ price: 70, color: '#ef5350', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed });
-        rsiSeries.createPriceLine({ price: 30, color: '#26a69a', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed });
-    } catch (e) {}
-}
+/* ================= MA / Bollinger ================= */
 
 async function loadMA() {
     const type = document.getElementById('ma-type').value;
     const wrap = document.getElementById('ma-period-wrap');
     if (maSeries && mainPanel) { try { mainPanel.series.removeValue(maSeries); } catch(e){} maSeries = null; }
     maHintEl.textContent = '';
-    legendState.ma = null;
     if (type === 'none') { wrap.style.display = 'none'; return; }
     wrap.style.display = '';
 
@@ -471,7 +503,7 @@ async function loadMA() {
         const name = type.toUpperCase() + '(' + period + ')';
         const pts  = j.data || [];
         if (!pts.length) {
-            maHintEl.textContent = 'недостаточно баров (есть ' + (j.bars || 0) + ', нужно ' + period + ')';
+            maHintEl.textContent = 'недостаточно баров';
             return;
         }
         maSeries = mainPanel.series.push(
@@ -494,7 +526,6 @@ async function loadBollinger() {
     const on = document.getElementById('bb-toggle').checked;
     if (mainPanel) bbSeries.forEach(s => { try { mainPanel.series.removeValue(s); } catch(e){} });
     bbSeries = [];
-    legendState.bb = null;
     if (!on) return;
 
     const days = document.getElementById('period').value;
@@ -530,66 +561,7 @@ async function loadBollinger() {
     } catch (e) { console.warn('bb:', e); }
 }
 
-async function loadLowerPanel() {
-    const panel = document.getElementById('lower-panel').value;
-    const days = document.getElementById('period').value;
-    const g    = document.getElementById('granularity').value;
-
-    macdSeries.forEach(s => { try { rsiChart.removeSeries(s); } catch(e){} });
-    macdSeries = [];
-    if (rsiSeries) { try { rsiSeries.setData([]); } catch(e){} }
-    legendState.lower = 0;
-
-    if (panel === 'rsi') {
-        document.getElementById('lower-title').textContent = 'RSI(' + RSI_PERIOD + ')';
-        document.getElementById('lower-subtitle').textContent = '— индикатор (не прогноз). Уровни 70 / 30 — перекупленность / перепроданность.';
-        try {
-            const url = `index.php?r=api-rsi&market=${encodeURIComponent(MARKET)}&ticker=${encodeURIComponent(TICKER)}&days=${days}&period=${RSI_PERIOD}&granularity=${g}`;
-            const r = await fetch(url); const j = await r.json();
-            if (j.ok && rsiSeries) {
-                rsiSeries.setData(j.data || []);
-                legendState.lower = (j.data || []).length;
-            }
-        } catch (e) { console.warn('rsi:', e); }
-    } else {
-        document.getElementById('lower-title').textContent = 'MACD(12,26,9)';
-        document.getElementById('lower-subtitle').textContent = '— разница EMA(12) и EMA(26), сглаженная EMA(9). Гистограмма — MACD − Signal.';
-        try {
-            const url = `index.php?r=api-macd&market=${encodeURIComponent(MARKET)}&ticker=${encodeURIComponent(TICKER)}&days=${days}&granularity=${g}`;
-            const r = await fetch(url); const j = await r.json();
-            if (j.ok && j.data) {
-                const d = j.data;
-                const macdLine = rsiChart.addLineSeries({ color: '#42a5f5', lineWidth: 1, title: 'MACD' });
-                macdLine.setData(d.macd || []);
-                macdSeries.push(macdLine);
-                const sigLine = rsiChart.addLineSeries({ color: '#ffa726', lineWidth: 1, title: 'Signal' });
-                sigLine.setData(d.signal || []);
-                macdSeries.push(sigLine);
-                if (d.histogram && d.histogram.length) {
-                    const hist = rsiChart.addHistogramSeries({ color: '#26a69a', priceFormat: { type: 'volume' }, priceScaleId: 'right' });
-                    hist.setData(d.histogram.map(p => ({ time: p.time, value: p.value, color: p.value >= 0 ? '#26a69a' : '#ef5350' })));
-                    macdSeries.push(hist);
-                }
-                legendState.lower = (d.macd || []).length;
-            }
-        } catch (e) { console.warn('macd:', e); }
-    }
-}
-
-function renderLegend(items) {
-    return items.map(i =>
-        `<span class="legend-item${i.dimmed ? ' legend-dim' : ''}">` +
-        `<i style="background:${i.color}"></i> ${i.name}` +
-        (i.points !== undefined ? ` <span class="muted">(${i.points})</span>` : '') +
-        `</span>`
-    ).join('');
-}
-
-function rebuildLowerLegend() {
-    document.getElementById('rsi-legend').innerHTML = renderLegend([
-        { color: RSI_COLOR, name: 'Нижняя панель', points: legendState.lower, dimmed: !legendState.lower },
-    ]);
-}
+/* ================= Загрузка данных ================= */
 
 async function loadAll() {
     const days = parseInt(document.getElementById('period').value, 10);
@@ -598,7 +570,6 @@ async function loadAll() {
     showSkeleton();
     destroyCharts();
     initAmChart(days, g);
-    initRsiChart();
 
     try {
         const url = `index.php?r=api-history&market=${encodeURIComponent(MARKET)}&ticker=${encodeURIComponent(TICKER)}&days=${days}&granularity=${g}`;
@@ -612,8 +583,12 @@ async function loadAll() {
             value: d.value !== undefined ? d.value : d.close,
         }));
 
+        if (historyData.length > 0) {
+            globalMinDate = historyData[0].Date;
+            globalMaxDate = historyData[historyData.length - 1].Date;
+        }
+
         renderPriceSeries(historyData, chartType);
-        legendState.price = historyData.length;
         hideSkeleton();
     } catch (e) {
         hideSkeleton();
@@ -626,18 +601,19 @@ async function loadAll() {
         const fj = await fr.json();
         const lines = fj.lines || [];
         forecastLinesData = lines;
-        legendState.lines = lines;
         renderForecastLines(lines);
     } catch (e) { console.warn('forecast:', e); }
 
     await loadMA();
     await loadBollinger();
     await loadLowerPanel();
-    rebuildLowerLegend();
+    
     statusEl.textContent = 'Готово';
     loadVerification();
-    loadCompareForecasts();
+    loadCompareForecasts(days); // Этап 3
 }
+
+/* ================= Верификация ================= */
 
 async function loadVerification() {
     const box = document.getElementById('verify-container');
@@ -655,52 +631,248 @@ async function loadVerification() {
 
 function renderVerification(lines) {
     const box = document.getElementById('verify-container');
-    if (!lines || !lines.length) { box.innerHTML = '<p class="warn">Прогнозов для верификации нет.</p>'; return; }
+    if (!lines || !lines.length) { 
+        box.innerHTML = '<p class="warn">Прогнозов для верификации нет.</p>'; 
+        return; 
+    }
+    
     let html = '';
     for (const line of lines) {
         const v = line.verify;
         html += `<h3 style="margin-top:28px;color:${line.color}">${line.name}</h3>`;
-        if (!v.rows || !v.rows.length) { html += '<p class="muted">Нет пересечения прогноза с фактической историей.</p>'; continue; }
-        if (v.mape !== null) html += `<p class="muted">MAPE: <b>${v.mape}%</b> · Hit-rate: <b>${(v.hit_rate*100).toFixed(1)}%</b> · Точек: ${v.count}</p>`;
-        html += '<table class="stock-table"><thead><tr><th>Дата</th><th>Прогноз (цена)</th><th>Факт</th><th>Отклонение, %</th><th>Статус</th></tr></thead><tbody>';
+        
+        if (!v.rows || !v.rows.length) { 
+            html += '<p class="muted">Нет данных за выбранный период.</p>'; 
+            continue; 
+        }
+        
+        // Метрики за прошедший период
+        if (v.count > 0) {
+            let corrText = '';
+            if (v.pearson !== null) {
+                let quality = 'слабая';
+                if (v.pearson > 0.7) quality = 'сильная';
+                else if (v.pearson > 0.4) quality = 'умеренная';
+                else if (v.pearson < 0) quality = 'обратная';
+                corrText = ` · Корреляция: <b>${v.pearson}</b> <span class="muted">(${quality})</span>`;
+            }
+            html += `<p class="muted">Успешных векторов (≥50% движения): <b>${(v.hit_rate*100).toFixed(1)}%</b>${corrText} · Проверено точек: ${v.count}</p>`;
+        } else {
+            html += `<p class="muted">Все прогнозы на будущие даты (проверка ещё не началась).</p>`;
+        }
+        
+        // Таблица
+        html += '<table class="stock-table"><thead><tr><th>Дата</th><th>Дельта</th><th>Прогноз (цена)</th><th>Факт</th><th>Отклонение, %</th><th>Статус / Вектор</th></tr></thead><tbody>';
         for (const row of v.rows) {
             const dev = row.deviation_pct !== null ? row.deviation_pct.toFixed(2) : '—';
-            const cls = row.status === 'сбылся' ? 'status-ok' : row.status === 'не сбылся' ? 'status-no' : '';
-            html += `<tr><td>${row.time}</td><td>${row.forecast}</td><td>${row.fact}</td><td class="${cls}">${dev}</td><td class="${cls}">${row.status}</td></tr>`;
+            const factStr = row.fact !== null ? row.fact : '—';
+            
+            let cls = 'muted';
+            let style = '';
+            if (row.status.includes('сбылся (успех)')) { cls = 'status-ok'; }
+            else if (row.status.includes('не сбылся')) { cls = 'status-no'; }
+            else if (row.status.includes('частично')) { cls = 'status-warn'; style = 'color: #ffa726;'; }
+
+            html += `<tr>
+                <td>${row.time}</td>
+                <td class="muted">${row.delta !== undefined ? row.delta : '—'}</td>
+                <td>${row.forecast}</td>
+                <td>${factStr}</td>
+                <td class="${cls}" style="${style}">${dev}</td>
+                <td class="${cls}" style="${style}">${row.status}</td>
+            </tr>`;
         }
         html += '</tbody></table>';
     }
     box.innerHTML = html;
 }
 
-async function loadCompareForecasts() {
-    const el = document.getElementById('compare-forecasts-chart');
-    const legendEl = document.getElementById('compare-forecasts-legend');
-    if (!el) return;
-    if (compareForecastsChart) { try { compareForecastsChart.remove(); } catch(e){} }
-    const opts = chartOptionsLw();
-    compareForecastsChart = LightweightCharts.createChart(el, Object.assign({}, opts, { width: el.clientWidth, height: 360 }));
-    window.compareForecastsChart = compareForecastsChart;
+/* ================= Сравнение моделей (Этап 3) ================= */
 
-    const res = await fetch(`index.php?r=api-forecast&market=${encodeURIComponent(MARKET)}&ticker=${encodeURIComponent(TICKER)}`);
-    const data = await res.json();
-    const lines = data.lines || [];
+let compareRoot = null;
+
+async function loadCompareForecasts(days) {
+    const el = document.getElementById('compare-forecasts-chart');
+    if (!el) return;
+    
+    if (compareRoot) { try { compareRoot.dispose(); } catch(e){} compareRoot = null; }
+
+    compareRoot = am5.Root.new("compare-forecasts-chart");
+    compareRoot.setThemes([am5themes_Animated.new(compareRoot)]);
+    if (isDarkTheme()) compareRoot.setThemes([am5themes_Dark.new(compareRoot)]);
+    
+    compareRoot.fontFamily = "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+
+    const chart = compareRoot.container.children.push(
+        am5xy.XYChart.new(compareRoot, {
+            wheelY: "zoomX",
+            panX: true,
+            panY: true,
+            layout: compareRoot.verticalLayout
+        })
+    );
+
+    // --- Оси ---
+    const dateAxisRenderer = am5xy.AxisRendererX.new(compareRoot, {});
+    dateAxisRenderer.labels.template.setAll({ fontSize: 12, fill: am5.color(isDarkTheme() ? "#d1d4dc" : "#333333") });
+    const dateAxis = chart.xAxes.push(am5xy.DateAxis.new(compareRoot, {
+        baseInterval: { timeUnit: "day", count: 1 },
+        renderer: dateAxisRenderer,
+    }));
+
+    const deltaAxisRenderer = am5xy.AxisRendererY.new(compareRoot, {});
+    deltaAxisRenderer.labels.template.setAll({ fontSize: 12, fill: am5.color(isDarkTheme() ? "#d1d4dc" : "#333333") });
+    const valueAxisDelta = chart.yAxes.push(am5xy.ValueAxis.new(compareRoot, {
+        renderer: deltaAxisRenderer,
+        title: am5.Label.new(compareRoot, { text: "Дельта", fontSize: 12, fill: am5.color('#ef5350') })
+    }));
+
+    const priceAxisRenderer = am5xy.AxisRendererY.new(compareRoot, { opposite: true });
+    priceAxisRenderer.labels.template.setAll({ fontSize: 12, fill: am5.color(isDarkTheme() ? "#d1d4dc" : "#333333") });
+    const valueAxisPrice = chart.yAxes.push(am5xy.ValueAxis.new(compareRoot, {
+        renderer: priceAxisRenderer,
+        title: am5.Label.new(compareRoot, { text: "Курс", fontSize: 12, fill: am5.color('#26a69a') })
+    }));
+
+    chart.set("cursor", am5xy.XYCursor.new(compareRoot, {
+        behavior: "zoomX",
+        xAxis: dateAxis,
+    }));
+
+    chart.children.push(am5.Legend.new(compareRoot, {
+        centerX: am5.p50,
+        x: am5.p50,
+        marginTop: 10
+    }));
+
     const colors = { 1: '#ef5350', 2: '#42a5f5', 3: '#ffa726' };
-    const legendItems = [];
-    for (const line of lines) {
-        if (!line.data || !line.data.length) continue;
-        const base = line.data[0].value;
-        if (base === 0) continue;
-        const normalized = line.data.map(p => ({ time: p.time, value: (p.value / base) * 100 }));
-        const series = compareForecastsChart.addLineSeries({ color: colors[line.line_num] || '#888', lineWidth: 2, title: line.name });
-        series.setData(normalized);
-        legendItems.push({ color: colors[line.line_num], name: line.name, points: normalized.length });
-    }
-    legendEl.innerHTML = legendItems.map(i =>
-        `<span class="legend-item"><i style="background:${i.color}"></i> ${i.name} (${i.points})</span>`
-    ).join('');
-    compareForecastsChart.timeScale().fitContent();
+    let lastKnownDate = Date.now();
+    let maxDate = Date.now() + (days * 24 * 60 * 60 * 1000);
+
+    // --- 1. Факт (Цена) ---
+    try {
+        const histRes = await fetch(`index.php?r=api-history&market=${encodeURIComponent(MARKET)}&ticker=${encodeURIComponent(TICKER)}&days=${days}&granularity=day`);
+        const histData = await histRes.json();
+        
+        if (histData.ok && histData.data && histData.data.length) {
+            lastKnownDate = toTs(histData.data[histData.data.length - 1].time);
+            maxDate = lastKnownDate + (days * 24 * 60 * 60 * 1000); 
+
+            const priceData = histData.data.map(p => ({
+                Date: toTs(p.time),
+                value: p.close !== undefined ? p.close : p.value
+            }));
+
+            const factSeries = chart.series.push(am5xy.LineSeries.new(compareRoot, {
+                name: "Курс (Цена)",
+                xAxis: dateAxis,
+                yAxis: valueAxisPrice,
+                valueXField: "Date",
+                valueYField: "value",
+                stroke: am5.color("#26a69a"),
+                strokeWidth: 3,
+                tooltip: am5.Tooltip.new(compareRoot, { labelText: "Цена: {valueY.formatNumber('#.00')}" })
+            }));
+            factSeries.data.setAll(priceData);
+        }
+    } catch (e) { console.warn('compare history:', e); }
+
+    // --- 2. Прогнозы (Дельты) с маркерами статуса ---
+    try {
+        // Получаем данные верификации и делаем КАРТУ ДЛЯ КАЖДОЙ ЛИНИИ
+        const verRes = await fetch(`index.php?r=api-verify&market=${encodeURIComponent(MARKET)}&ticker=${encodeURIComponent(TICKER)}`);
+        const verJson = await verRes.json();
+        const verifyMaps = {}; // line_num => { dateStr => status }
+        
+        if (verJson.ok && verJson.lines) {
+            for (const line of verJson.lines) {
+                if (line.verify && line.verify.rows) {
+                    const map = {};
+                    for (const row of line.verify.rows) {
+                        const dateStr = normalizeDate(row.time);
+                        map[dateStr] = row.status;
+                    }
+                    verifyMaps[line.line_num] = map;
+                }
+            }
+        }
+
+        const fr = await fetch(`index.php?r=api-forecast&market=${encodeURIComponent(MARKET)}&ticker=${encodeURIComponent(TICKER)}&granularity=day`);
+        const fj = await fr.json();
+        const lines = fj.lines || [];
+
+        for (const line of lines) {
+            if (!line.data || !line.data.length) continue;
+
+            const filtered = line.data.filter(p => {
+                const ts = toTs(p.time);
+                return ts >= (lastKnownDate - (days * 24 * 60 * 60 * 1000)) && ts <= maxDate;
+            });
+
+            if (!filtered.length) continue;
+
+            const lineMap = verifyMaps[line.line_num] || {};
+            
+            const seriesData = filtered.map(p => {
+                const dateStr = normalizeDate(p.time);
+                const status = lineMap[dateStr] || 'ожидается';
+                return {
+                    Date: toTs(p.time),
+                    value: p.value,
+                    status: status
+                };
+            });
+
+            const series = chart.series.push(am5xy.LineSeries.new(compareRoot, {
+                name: line.name,
+                xAxis: dateAxis,
+                yAxis: valueAxisDelta,
+                valueXField: "Date",
+                valueYField: "value",
+                stroke: am5.color(colors[line.line_num] || "#888"),
+                strokeWidth: 2,
+                strokeDasharray: line.computed ? [4, 4] : undefined,
+                tooltip: am5.Tooltip.new(compareRoot, { labelText: line.name + ": {valueY.formatNumber('#.0000')} ({status})" })
+            }));
+
+            series.bullets.push(function(root, series, dataItem) {
+                // ИСПРАВЛЕНИЕ: используем dataContext для получения поля status
+                let status = (dataItem.dataContext.status || '').toString().trim();
+                
+                // Если ожидается — скрываем точку
+                if (!status || status.includes('ожидается')) {
+                    return am5.Bullet.new(root, {
+                        sprite: am5.Circle.new(root, { radius: 0 })
+                    });
+                }
+
+                let color = am5.color("#888888");
+                if (status.includes('сбылся')) {
+                    color = am5.color("#26a69a"); // Зеленый
+                } else if (status.includes('не сбылся')) {
+                    color = am5.color("#ef5350"); // Красный
+                } else if (status.includes('частично')) {
+                    color = am5.color("#ffa726"); // Оранжевый
+                }
+
+                return am5.Bullet.new(root, {
+                    sprite: am5.Circle.new(root, {
+                        radius: 4,
+                        fill: color,
+                        stroke: am5.color(isDarkTheme() ? "#131722" : "#ffffff"),
+                        strokeWidth: 1
+                    })
+                });
+            });
+
+            series.data.setAll(seriesData);
+        }
+    } catch (e) { console.warn('compare forecast:', e); }
+
+    chart.appear(800, 100);
 }
+
+/* ================= Экспорт и UI ================= */
 
 document.getElementById('btn-export-png').addEventListener('click', function () {
     try {
@@ -718,14 +890,10 @@ document.getElementById('btn-export-png').addEventListener('click', function () 
 document.getElementById('toggle-lower').addEventListener('click', function () {
     document.body.classList.toggle('hide-lower');
     const hidden = document.body.classList.contains('hide-lower');
-    setTimeout(() => {
-        try {
-            if (rsiChart && !hidden) {
-                const rw = rsiChartEl.clientWidth;
-                if (rw > 0) rsiChart.applyOptions({ width: rw });
-            }
-        } catch (e) {}
-    }, 50);
+    
+    if (lowerIndicator && lowerIndicator.panel) {
+        lowerIndicator.panel.set("visible", !hidden);
+    }
 });
 
 document.getElementById('period').addEventListener('change', loadAll);
@@ -748,16 +916,6 @@ document.getElementById('ma-period').addEventListener('input', function () {
 
 document.getElementById('theme-toggle').addEventListener('click', function () {
     setTimeout(loadAll, 150);
-});
-
-window.addEventListener('resize', function () {
-    try {
-        if (rsiChart && !document.body.classList.contains('hide-lower') && rsiChartEl.clientWidth > 0)
-            rsiChart.applyOptions({ width: rsiChartEl.clientWidth });
-        const cmpEl = document.getElementById('compare-forecasts-chart');
-        if (compareForecastsChart && cmpEl && cmpEl.clientWidth > 0)
-            compareForecastsChart.applyOptions({ width: cmpEl.clientWidth });
-    } catch (e) {}
 });
 
 document.getElementById('chart-type').value = chartType;
