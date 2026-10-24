@@ -1,7 +1,6 @@
 <?php
 declare(strict_types=1);
 
-// Убираем ограничения по времени и памяти для обработки всех тикеров
 set_time_limit(0);
 ini_set('memory_limit', '512M');
 
@@ -56,7 +55,7 @@ foreach ($tickers as $t) {
     }
     
     if (!isset($byLine[1], $byLine[3])) {
-        continue; // Пропускаем, если нет обеих линий
+        continue;
     }
 
     $common = array_values(array_intersect(array_keys($byLine[1]), array_keys($byLine[3])));
@@ -74,15 +73,15 @@ foreach ($tickers as $t) {
 
     $pdo->beginTransaction();
     
-    // ИСПРАВЛЕНИЕ: слово `signal` обернуто в обратные кавычки
+    // ИСПОЛЬЗУЕМ trade_action ВМЕСТО signal
     $ins = $pdo->prepare(
         "INSERT INTO synthetic_components 
-         (market, ticker, date, z1, z3, w1, w3, synthetic, dir1, dir3, `signal`, confidence)
+         (market, ticker, date, z1, z3, w1, w3, synthetic, dir1, dir3, trade_action, confidence)
          VALUES (:m, :t, :d, :z1, :z3, :w1, :w3, :s, :d1, :d3, :sig, :c)
          ON DUPLICATE KEY UPDATE
            z1 = VALUES(z1), z3 = VALUES(z3), w1 = VALUES(w1), w3 = VALUES(w3),
            synthetic = VALUES(synthetic), dir1 = VALUES(dir1), dir3 = VALUES(dir3),
-           `signal` = VALUES(`signal`), confidence = VALUES(confidence)"
+           trade_action = VALUES(trade_action), confidence = VALUES(confidence)"
     );
 
     foreach ($syntheticData as $row) {
