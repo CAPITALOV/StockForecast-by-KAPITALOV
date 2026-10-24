@@ -26,7 +26,7 @@ if (!function_exists('lines_meta')) {
     function lines_meta(): array {
         return [
             1 => ['name' => 'Delta Close — направление тренда Close', 'color' => '#e11d48', 'public' => true],
-            2 => ['name' => 'Synthetic Average',                       'color' => '#f59e0b', 'public' => true],  // ← ИЗМЕНЕНО
+            2 => ['name' => 'Synthetic Average',                       'color' => '#f59e0b', 'public' => true],
             3 => ['name' => 'RPO — Weighted average price',            'color' => '#2563eb', 'public' => true],
         ];
     }
@@ -68,11 +68,14 @@ switch ($route) {
         $g = gr();
         $pdo = db();
         $found = [];
+        
+        // 1. Загружаем линии 1 и 3 из старой таблицы
         if ($ticker !== '') {
-            $stmt = $pdo->prepare("SELECT line_num, content, value_type FROM forecast_lines WHERE market = ? AND ticker = ?");
+            $stmt = $pdo->prepare("SELECT line_num, content, value_type FROM forecast_lines WHERE market = ? AND ticker = ? AND line_num IN (1,3)");
             $stmt->execute([$market, $ticker]);
             foreach ($stmt->fetchAll() as $r) $found[(int)$r['line_num']] = $r;
         }
+        
         $meta = lines_meta();
         $raw = [];
         for ($i = 1; $i <= 3; $i++) {
@@ -83,17 +86,51 @@ switch ($route) {
                 'computed'   => false,
             ];
         }
+
+        // 2. ДОБАВЛЕНО: Загружаем Линию 2 (Синтетическую) из synthetic_components
+        if ($ticker !== '') {
+            $stmtSynth = $pdo->prepare(
+                "SELECT date, synthetic, trade_action 
+                 FROM synthetic_components 
+                 WHERE market = ? AND ticker = ? 
+                 ORDER BY date ASC"
+            );
+            $stmtSynth->execute([$market, $ticker]);
+            $synthRows = $stmtSynth->fetchAll();
+            
+            if (!empty($synthRows)) {
+                $raw[2]['value_type'] = 'delta'; // Использовать правую ось (как у дельт)
+                $raw[2]['computed'] = true;
+                foreach ($synthRows as $r) {
+                    $raw[2]['data'][] = [
+                        'time' => $r['date'],
+                        'value' => (float)$r['synthetic'],
+                        'signal' => $r['trade_action'] // Передаем buy/sell на фронт
+                    ];
+                }
+            }
+        }
+
+        // Фолбэк, если синтетики для тикера еще нет
         if (empty($raw[2]['data']) && !empty($raw[1]['data']) && !empty($raw[3]['data'])
             && $raw[1]['value_type'] === $raw[3]['value_type']) {
             $raw[2]['data']       = average_forecast_lines($raw[1]['data'], $raw[3]['data']);
             $raw[2]['value_type'] = $raw[1]['value_type'];
             $raw[2]['computed']   = true;
         }
+
         $lines = [];
         for ($i = 1; $i <= 3; $i++) {
-            $isPublic = $meta[$i]['public'] ?? false;                  // ← ИЗМЕНЕНО
+            $isPublic = $meta[$i]['public'] ?? false;
             if (!$isPublic && !$IS_ADMIN) continue;
-            $aggr = aggregate_forecast_lines($raw[$i]['data'], $raw[$i]['value_type'], $g);
+            
+            // Если это Линия 2 и у нее есть сигналы, НЕ агрегируем (чтобы не потерять метки buy/sell)
+            if ($i === 2 && !empty($raw[2]['data']) && isset($raw[2]['data'][0]['signal'])) {
+                $aggr = $raw[2]['data'];
+            } else {
+                $aggr = aggregate_forecast_lines($raw[$i]['data'], $raw[$i]['value_type'], $g);
+            }
+            
             $lines[] = [
                 'line_num'   => $i,
                 'name'       => $meta[$i]['name'] . ($raw[$i]['computed'] ? ' · авто' : ''),
@@ -208,7 +245,7 @@ switch ($route) {
         $tickers = array_slice($tickers, 0, 5);
         if (empty($tickers)) { http_response_code(400); echo json_encode(['ok' => false, 'error' => 'tickers required']); break; }
         $colors = ['#ef5350', '#42a5f5', '#ffa726', '#66bb6a', '#ab47bc'];
-        $meta   = lines_meta();                                            // ← ДОБАВЛЕНО
+        $meta   = lines_meta();                                            
         $series = [];
         foreach ($tickers as $idx => $t) {
             $t = strtoupper($t);
@@ -224,7 +261,7 @@ switch ($route) {
                 $stmt->execute([$market, $t]);
                 foreach ($stmt->fetchAll() as $r) {
                     $num = (int)$r['line_num'];
-                    $isPublic = $meta[$num]['public'] ?? false;                // ← ИЗМЕНЕНО
+                    $isPublic = $meta[$num]['public'] ?? false;                
                     if (!$isPublic && !$IS_ADMIN) continue;
 
                     $points = parse_forecast($r['content']);
@@ -262,12 +299,12 @@ switch ($route) {
         echo "\xEF\xBB\xBF";
         $out = fopen('php://output', 'w');
         fputcsv($out, ['Биржа','Тикер','Линия','Тип','Дата','Прогноз','Факт','Отклонение %','Статус'], ';');
-        $meta = lines_meta();                                              // ← ДОБАВЛЕНО
+        $meta = lines_meta();                                              
         $stmt = db()->prepare("SELECT line_num, value_type, content FROM forecast_lines WHERE market = ? AND ticker = ? ORDER BY line_num");
         $stmt->execute([$market, $ticker]);
         foreach ($stmt->fetchAll() as $r) {
             $num = (int)$r['line_num'];
-            $isPublic = $meta[$num]['public'] ?? false;                    // ← ИЗМЕНЕНО
+            $isPublic = $meta[$num]['public'] ?? false;                    
             if (!$isPublic && !$IS_ADMIN) continue;
 
             $points = parse_forecast($r['content']);
@@ -291,11 +328,11 @@ switch ($route) {
         echo "\xEF\xBB\xBF";
         $out = fopen('php://output', 'w');
         fputcsv($out, ['Биржа','Тикер','Линия','Тип','MAPE %','Hit-rate %','Точек'], ';');
-        $meta = lines_meta();                                              // ← ДОБАВЛЕНО
+        $meta = lines_meta();                                              
         $rows = db()->query("SELECT market, ticker, line_num, value_type, content FROM forecast_lines ORDER BY market, ticker, line_num")->fetchAll();
         foreach ($rows as $r) {
             $num = (int)$r['line_num'];
-            $isPublic = $meta[$num]['public'] ?? false;                    // ← ИЗМЕНЕНО
+            $isPublic = $meta[$num]['public'] ?? false;                    
             if (!$isPublic && !$IS_ADMIN) continue;
 
             $points = parse_forecast($r['content']);
