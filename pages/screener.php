@@ -86,7 +86,7 @@ $csvQuery = http_build_query([
             <option value="30"  <?= $days===30  ? 'selected' : '' ?>>30 дней</option>
             <option value="90"  <?= $days===90  ? 'selected' : '' ?>>90 дней</option>
             <option value="180" <?= $days===180 ? 'selected' : '' ?>>180 дней</option>
-            <option value="365" <?= $days===365 ? 'selected' : '' ?>>1 год</option>
+            <option value="365" <?= $days===365 ? 'selected' : '' ?>>365 дней</option>
         </select>
     </label>
     <label>Биржа:
