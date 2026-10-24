@@ -45,3 +45,6 @@ logs/
 .DS_Store
 Thumbs.dbconfig.php
 data/*.json
+scripts/research/.venv/
+*.sql
+дамп базы данных mysql/
