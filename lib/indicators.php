@@ -119,16 +119,23 @@ function calc_bollinger(array $bars, int $period = 20, float $mult = 2.0): array
     return ['sma' => $sma, 'upper' => $upper, 'lower' => $lower];
 }
 
-function average_forecast_lines(array $a, array $b): array {
-    $byDate = [];
-    foreach ($a as $p) { $byDate[$p['time']][] = (float)$p['value']; }
-    foreach ($b as $p) { $byDate[$p['time']][] = (float)$p['value']; }
-    $out = [];
-    foreach ($byDate as $date => $vals) {
-        $out[] = ['time' => (string)$date, 'value' => array_sum($vals) / count($vals)];
+/* ============================================================
+ * Guard: average_forecast_lines объявлена ещё и в lib/forecast.php.
+ * Порядок загрузки: forecast.php → indicators.php.
+ * Без guard'а PHP падает с "Cannot redeclare function".
+ * ============================================================ */
+if (!function_exists('average_forecast_lines')) {
+    function average_forecast_lines(array $a, array $b): array {
+        $byDate = [];
+        foreach ($a as $p) { $byDate[$p['time']][] = (float)$p['value']; }
+        foreach ($b as $p) { $byDate[$p['time']][] = (float)$p['value']; }
+        $out = [];
+        foreach ($byDate as $date => $vals) {
+            $out[] = ['time' => (string)$date, 'value' => array_sum($vals) / count($vals)];
+        }
+        usort($out, function ($x, $y) { return strcmp($x['time'], $y['time']); });
+        return $out;
     }
-    usort($out, function ($x, $y) { return strcmp($x['time'], $y['time']); });
-    return $out;
 }
 
 function aggregate_bars(array $bars, string $granularity): array {
@@ -145,26 +152,31 @@ function aggregate_bars(array $bars, string $granularity): array {
     return $out;
 }
 
-function aggregate_forecast_lines(array $points, string $type, string $granularity): array {
-    if ($granularity === 'day' || empty($points)) return $points;
-    $grouped = [];
-    foreach ($points as $p) {
-        $date = (string)$p['time'];
-        $ts = strtotime($date);
-        $key = $granularity === 'week' ? date('o-W', $ts) : substr($date, 0, 7);
-        $grouped[$key][] = $p;
-    }
-    $out = [];
-    foreach ($grouped as $items) {
-        $last = end($items);
-        if ($type === 'delta') {
-            $compound = 1.0;
-            foreach ($items as $p) $compound *= (1.0 + (float)$p['value']);
-            $out[] = ['time' => $last['time'], 'value' => $compound - 1.0];
-        } else {
-            $out[] = ['time' => $last['time'], 'value' => (float)$last['value']];
+/* ============================================================
+ * Guard: aggregate_forecast_lines тоже объявлена в lib/forecast.php.
+ * ============================================================ */
+if (!function_exists('aggregate_forecast_lines')) {
+    function aggregate_forecast_lines(array $points, string $type, string $granularity): array {
+        if ($granularity === 'day' || empty($points)) return $points;
+        $grouped = [];
+        foreach ($points as $p) {
+            $date = (string)$p['time'];
+            $ts = strtotime($date);
+            $key = $granularity === 'week' ? date('o-W', $ts) : substr($date, 0, 7);
+            $grouped[$key][] = $p;
         }
+        $out = [];
+        foreach ($grouped as $items) {
+            $last = end($items);
+            if ($type === 'delta') {
+                $compound = 1.0;
+                foreach ($items as $p) $compound *= (1.0 + (float)$p['value']);
+                $out[] = ['time' => $last['time'], 'value' => $compound - 1.0];
+            } else {
+                $out[] = ['time' => $last['time'], 'value' => (float)$last['value']];
+            }
+        }
+        usort($out, function ($a, $b) { return strcmp($a['time'], $b['time']); });
+        return $out;
     }
-    usort($out, function ($a, $b) { return strcmp($a['time'], $b['time']); });
-    return $out;
 }

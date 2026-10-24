@@ -74,14 +74,57 @@ function save_bars($stockId, $data, $source) {
 
 function history_get($market, $ticker, $days, $mode = 'auto') {
     $stockId = stock_id_by_ticker($market, $ticker, true);
+    $db = [];
+
+    // ─── 1. Читаем из БД (кроме mode='live') ─────────────────────
     if ($mode !== 'live' && $stockId !== null) {
         $db = history_from_db($stockId, $days);
-        if (!empty($db)) return ['data' => $db, 'source' => 'db'];
-        if ($mode === 'db') return ['data' => [], 'source' => 'db'];
+
+        if ($mode === 'db') {
+            return ['data' => $db, 'source' => 'db'];
+        }
+
+        // Если БД ПОКРЫВАЕТ запрошенный период — возвращаем как есть
+        if (!empty($db)) {
+            $earliestDb   = $db[0]['time'];
+            $expectedFrom = date('Y-m-d', time() - $days * 86400);
+            if ($earliestDb <= $expectedFrom) {
+                return ['data' => $db, 'source' => 'db'];
+            }
+            // Иначе — БД не покрывает диапазон, идём в live
+        }
     }
-    $live = ($market === 'moex') ? moex_history($ticker, $days) : us_history($ticker, $days);
-    if ($mode === 'auto' && $stockId !== null && !empty($live)) {
+
+    // ─── 2. Live: запрос к API ────────────────────────────────────
+    $live = [];
+    try {
+        $live = ($market === 'moex')
+            ? moex_history($ticker, $days)
+            : us_history($ticker, $days);
+    } catch (Throwable $e) {
+        // API недоступен — вернём то, что есть в БД
+        if (!empty($db)) return ['data' => $db, 'source' => 'db'];
+        throw $e;
+    }
+
+    // ─── 3. ВСЕГДА сохраняем live в БД (и в auto, и в live) ──────
+    if ($stockId !== null && !empty($live)) {
         try { save_bars($stockId, $live, $market); } catch (Throwable $e) {}
     }
-    return ['data' => $live, 'source' => 'live'];
+
+    // ─── 4. Мержим DB + live (дедупликация по дате) ──────────────
+    if (!empty($db) && !empty($live)) {
+        $seen = [];
+        $merged = [];
+        foreach (array_merge($db, $live) as $row) {
+            if (isset($seen[$row['time']])) continue;
+            $seen[$row['time']] = true;
+            $merged[] = $row;
+        }
+        usort($merged, fn($a, $b) => strcmp($a['time'], $b['time']));
+        return ['data' => $merged, 'source' => 'db+live'];
+    }
+
+    if (!empty($live)) return ['data' => $live, 'source' => 'live'];
+    return ['data' => $db, 'source' => 'db'];
 }
