@@ -19,3 +19,28 @@ data/*.log
 composer.json
 composer.phar
 webstat/
+
+# Секреты
+.env
+.env.*
+config.php
+bootstrap.local.php
+*.pem
+*.key
+
+# Бэкапы от наших правок
+*.bak
+*.backup
+*.old
+*.tmp
+
+# Рабочие данные
+data/
+reports/
+static/uploads/
+logs/
+*.log
+
+# ОС
+.DS_Store
+Thumbs.db
