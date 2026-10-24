@@ -1,0 +1,168 @@
+<?php
+declare(strict_types=1);
+
+/**
+ * lib/synthetic.php — v2.1.0
+ * Адаптивная Линия 2 (синтетическая) для StockForecast.
+ *
+ * Согласовано с PROJECT_HISTORY.md:
+ *  - верификация 2.0 ("Правило 50%" + Пирсон) остаётся в lib/verify.php
+ *  - никакого заглядывания вперёд: accuracy в t использует hit[t - horizon]
+ *  - на вход подаются дельты, даты уже нормализованы в Y-m-d
+ */
+
+const SYN_PARAMS_DEFAULT = [
+    'zscore_window'    => 60,
+    'weight_window'    => 60,
+    'slope_lookback'   => 3,
+    'horizon'          => 1,
+    'smooth_beta'      => 0.9,
+    'w_min'            => 0.2,
+    'w_max'            => 0.8,
+    'signal_threshold' => 0.25,
+];
+
+function syn_merge_params(array $overrides = []): array
+{
+    return array_merge(SYN_PARAMS_DEFAULT, $overrides);
+}
+
+function syn_rolling_mean(array $x, int $w): array
+{
+    $n = count($x);
+    $out = array_fill(0, $n, null);
+    if ($w <= 0 || $n < $w) return $out;
+    for ($i = $w - 1; $i < $n; $i++) {
+        $s = 0.0; $ok = true;
+        for ($j = $i - $w + 1; $j <= $i; $j++) {
+            if ($x[$j] === null) { $ok = false; break; }
+            $s += (float)$x[$j];
+        }
+        if ($ok) $out[$i] = $s / $w;
+    }
+    return $out;
+}
+
+function syn_rolling_std(array $x, int $w, ?array $means = null): array
+{
+    $n = count($x);
+    $out = array_fill(0, $n, null);
+    if ($w <= 1 || $n < $w) return $out;
+    $means ??= syn_rolling_mean($x, $w);
+    for ($i = $w - 1; $i < $n; $i++) {
+        if ($means[$i] === null) continue;
+        $m = $means[$i]; $acc = 0.0;
+        for ($j = $i - $w + 1; $j <= $i; $j++) {
+            $d = (float)$x[$j] - $m;
+            $acc += $d * $d;
+        }
+        $out[$i] = sqrt($acc / $w); // ddof = 0, как в research-скрипте
+    }
+    return $out;
+}
+
+function syn_rolling_zscore(array $x, int $w): array
+{
+    $n = count($x);
+    $means = syn_rolling_mean($x, $w);
+    $stds  = syn_rolling_std($x, $w, $means);
+    $out = array_fill(0, $n, 0.0);
+    for ($i = 0; $i < $n; $i++) {
+        if ($means[$i] === null || $stds[$i] === null || $stds[$i] == 0.0) {
+            $out[$i] = 0.0;
+        } else {
+            $out[$i] = ((float)$x[$i] - $means[$i]) / $stds[$i];
+        }
+    }
+    return $out;
+}
+
+function syn_directional_accuracy(array $x, int $w, int $k, int $h): array
+{
+    $n = count($x);
+    $hits = array_fill(0, $n, null);
+    for ($i = $k; $i + $h < $n; $i++) {
+        $past   = (float)$x[$i] - (float)$x[$i - $k];
+        $future = (float)$x[$i + $h] - (float)$x[$i];
+        $sp = $past   <=> 0;
+        $sf = $future <=> 0;
+        $hits[$i] = ($sp === 0 || $sf === 0) ? 0.5 : (($sp === $sf) ? 1.0 : 0.0);
+    }
+    $shifted = array_fill(0, $n, null);
+    for ($i = 0; $i + $h < $n; $i++) {
+        if ($hits[$i] !== null) $shifted[$i + $h] = $hits[$i];
+    }
+    return syn_rolling_mean($shifted, $w);
+}
+
+function syn_adaptive_weights(array $x1, array $x3, array $p): array
+{
+    $a1 = syn_directional_accuracy($x1, (int)$p['weight_window'], (int)$p['slope_lookback'], (int)$p['horizon']);
+    $a3 = syn_directional_accuracy($x3, (int)$p['weight_window'], (int)$p['slope_lookback'], (int)$p['horizon']);
+    $n = count($x1);
+    $alpha = 1.0 - (float)$p['smooth_beta'];
+    $prev = 0.5;
+    $w1 = array_fill(0, $n, 0.5);
+    for ($i = 0; $i < $n; $i++) {
+        $h1 = $a1[$i] ?? null;
+        $h3 = $a3[$i] ?? null;
+        if ($h1 !== null && $h3 !== null) {
+            $r1 = max($h1 - 0.5, 0.0) + 1e-6;
+            $r3 = max($h3 - 0.5, 0.0) + 1e-6;
+            $raw = $r1 / ($r1 + $r3);
+        } else {
+            $raw = 0.5;
+        }
+        $prev = $alpha * $raw + (1.0 - $alpha) * $prev;
+        $w1[$i] = max((float)$p['w_min'], min((float)$p['w_max'], $prev));
+    }
+    $w3 = array_map(static fn(float $v): float => 1.0 - $v, $w1);
+    return [$w1, $w3];
+}
+
+/**
+ * @return array<int, array{date:string,z1:float,z3:float,w1:float,w3:float,
+ *                          synthetic:float,dir1:int,dir3:int,signal:string,confidence:float}>
+ */
+function syn_build(array $dates, array $line1, array $line3, array $overrides = []): array
+{
+    $p = syn_merge_params($overrides);
+    $n = count($dates);
+    if (count($line1) !== $n || count($line3) !== $n) {
+        throw new InvalidArgumentException('dates / line1 / line3 must be equal length');
+    }
+
+    $z1 = syn_rolling_zscore($line1, (int)$p['zscore_window']);
+    $z3 = syn_rolling_zscore($line3, (int)$p['zscore_window']);
+    [$w1, $w3] = syn_adaptive_weights($line1, $line3, $p);
+
+    $k   = (int)$p['slope_lookback'];
+    $thr = (float)$p['signal_threshold'];
+    $rows = [];
+
+    for ($i = 0; $i < $n; $i++) {
+        $synthetic = $w1[$i] * $z1[$i] + $w3[$i] * $z3[$i];
+        $dir1 = 0; $dir3 = 0;
+        if ($i >= $k) {
+            $dir1 = ((float)$line1[$i] - (float)$line1[$i - $k]) <=> 0;
+            $dir3 = ((float)$line3[$i] - (float)$line3[$i - $k]) <=> 0;
+        }
+        if ($dir1 > 0 && $dir3 > 0 && $synthetic >  $thr) $signal = 'buy';
+        elseif ($dir1 < 0 && $dir3 < 0 && $synthetic < -$thr) $signal = 'sell';
+        else $signal = 'neutral';
+
+        $rows[] = [
+            'date'       => $dates[$i],
+            'z1'         => round($z1[$i], 6),
+            'z3'         => round($z3[$i], 6),
+            'w1'         => round($w1[$i], 6),
+            'w3'         => round($w3[$i], 6),
+            'synthetic'  => round($synthetic, 6),
+            'dir1'       => $dir1,
+            'dir3'       => $dir3,
+            'signal'     => $signal,
+            'confidence' => round(min(1.0, abs($synthetic) / 3.0), 6),
+        ];
+    }
+    return $rows;
+}
