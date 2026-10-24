@@ -69,7 +69,7 @@ switch ($route) {
         $pdo = db();
         $found = [];
         
-        // 1. Загружаем линии 1 и 3 из старой таблицы
+        // Загружаем линии 1 и 3 из старой таблицы
         if ($ticker !== '') {
             $stmt = $pdo->prepare("SELECT line_num, content, value_type FROM forecast_lines WHERE market = ? AND ticker = ? AND line_num IN (1,3)");
             $stmt->execute([$market, $ticker]);
@@ -87,10 +87,10 @@ switch ($route) {
             ];
         }
 
-        // 2. ДОБАВЛЕНО: Загружаем Линию 2 (Синтетическую) из synthetic_components
+        // Загружаем Линию 2 (Синтетическую) из synthetic_components
         if ($ticker !== '') {
             $stmtSynth = $pdo->prepare(
-                "SELECT date, synthetic, trade_action 
+                "SELECT date, synthetic, trade_action, confidence, w1 
                  FROM synthetic_components 
                  WHERE market = ? AND ticker = ? 
                  ORDER BY date ASC"
@@ -99,13 +99,15 @@ switch ($route) {
             $synthRows = $stmtSynth->fetchAll();
             
             if (!empty($synthRows)) {
-                $raw[2]['value_type'] = 'delta'; // Использовать правую ось (как у дельт)
+                $raw[2]['value_type'] = 'delta';
                 $raw[2]['computed'] = true;
                 foreach ($synthRows as $r) {
                     $raw[2]['data'][] = [
                         'time' => $r['date'],
                         'value' => (float)$r['synthetic'],
-                        'signal' => $r['trade_action'] // Передаем buy/sell на фронт
+                        'signal' => $r['trade_action'],
+                        'confidence' => (float)$r['confidence'],
+                        'w1' => (float)$r['w1']
                     ];
                 }
             }
@@ -350,8 +352,10 @@ switch ($route) {
     case 'export-screener':
         $days   = max(7, min(365, (int)($_GET['days'] ?? 30)));
         $market = in_array($_GET['market'] ?? '', ['moex','us'], true) ? $_GET['market'] : '';
+        $signal = in_array($_GET['signal'] ?? '', ['buy','sell'], true) ? $_GET['signal'] : '';
         $sort   = in_array($_GET['sort'] ?? '', ['mape','hit','count','ticker'], true) ? $_GET['sort'] : 'mape';
-        $results = screener_data($days, $market);
+        
+        $results = screener_data($days, $market, $signal);
         usort($results, function ($a, $b) use ($sort) {
             switch ($sort) {
                 case 'hit':    return $b['hit_rate'] <=> $a['hit_rate'];
@@ -364,9 +368,9 @@ switch ($route) {
         header('Content-Disposition: attachment; filename="screener_' . date('Y-m-d') . '_' . $days . 'd.csv"');
         echo "\xEF\xBB\xBF";
         $out = fopen('php://output', 'w');
-        fputcsv($out, ['Биржа','Тикер','MAPE %','Hit-rate %','Точек','Лучшая линия'], ';');
+        fputcsv($out, ['Биржа','Тикер','Сигнал','MAPE %','Hit-rate %','Точек','Лучшая линия'], ';');
         foreach ($results as $r) {
-            fputcsv($out, [$r['market'], $r['ticker'], $r['mape'], round($r['hit_rate'] * 100, 2), $r['count'], $r['best_line']], ';');
+            fputcsv($out, [$r['market'], $r['ticker'], $r['current_signal'] ?? 'neutral', $r['mape'], round($r['hit_rate'] * 100, 2), $r['count'], $r['best_line']], ';');
         }
         fclose($out);
         exit;
