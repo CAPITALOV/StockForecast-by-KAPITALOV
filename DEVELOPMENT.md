@@ -317,3 +317,87 @@ text
 text
 
 ---
+
+# Руководство разработчика (Архитектура и Troubleshooting)
+
+## 🏗️ Архитектура данных и кэширования
+Из-за большого объема данных (история цен, расчет верификации для 100+ тикеров) прямые запросы в БД вызывали ошибки `504 Gateway Timeout`. 
+Мы внедрили **фоновое кэширование**:
+- `data/screener_cache.json` — кэш для Скринера.
+- `data/accuracy_cache.json` — кэш для страницы Точности.
+- `data/synthetic_components` (Таблица БД) — кэш сигналов и весов Линии 2.
+
+**Важно:** Страницы `pages/screener.php` и `pages/accuracy.php` **НЕ ДЕЛАЮТ** тяжелых запросов. Они просто читают JSON-файлы. Если данные не обновляются — проверьте Cron!
+
+## ⏱️ Cron-задачи (Обязательно к настройке на сервере)
+В `crontab` должны быть следующие задачи:
+```text
+# Пересчет синтетических сигналов (BUY/SELL) каждую ночь в 3:00
+0 3 * * * /usr/bin/php /path/to/project/scripts/cron/refresh_synthetic.php >> /var/log/synthetic_refresh.log 2>&1
+
+# Обновление кэша Скринера каждый час
+0 * * * * /usr/bin/php /path/to/project/scripts/cron/refresh_screener.php >> /var/log/screener_refresh.log 2>&1
+
+# Обновление кэша Точности каждый час
+0 * * * * /usr/bin/php /path/to/project/scripts/cron/refresh_accuracy.php >> /var/log/accuracy_refresh.log 2>&1
+
+⚠️ Известные «подводные камни» (Troubleshooting)
+Ошибка Unknown column 'signal'
+В MySQL слово signal зарезервировано. В таблице synthetic_components колонка называется trade_action. Не переименовывайте её в signal.
+
+Ошибка Unknown column 'hb.date'
+В таблице history_bars колонка с датой называется ts (timestamp), а не date. Всегда используйте ts в SQL-запросах.
+
+Ошибка Illegal mix of collations
+Все таблицы должны иметь кодировку utf8mb4_unicode_ci. Если создаете новые таблицы — указывайте её явно.
+
+Ошибка 504 Timeout после обновления кода
+PHP OPcache может держать старый код в памяти. Если изменения не применяются, выполните: sudo systemctl restart php*-fpm.
+
+📂 Структура ключевых файлов
+lib/synthetic.php — ядро математики Линии 2 (Z-score, SMA-5, веса).
+
+lib/screener.php — логика чтения кэша Скринера и генерации screener_cache.json.
+
+pages/stock.php — график акции (amCharts), тултипы, кнопка Избранного.
+
+pages/signals.php — страница Бэктеста (история сигналов и доходность).
+
+text
+
+---
+
+### Шаг 5. Обновляем `CHANGELOG.md`
+Добавьте в самый верх:
+
+```markdown
+## [2.2.0] - 2026-10-25
+### Added
+- Страница «История сигналов» (Бэктест доходности).
+- Индикатор «Ширина рынка» (Market Breadth) на главной.
+- Функционал «Избранное» (Watchlist) на базе localStorage.
+- Тултипы с уверенностью для сигналов на графике.
+- Фильтр по сигналам в Скринере.
+
+### Fixed
+- **Критический фикс**: Устранены зависания сервера (504) на страницах Скринера и Точности благодаря переходу на JSON-кэширование.
+- Исправлен расчет `Hit-rate` (ранее показывал фейковые 100%).
+- Исправлен конфликт кодировок MySQL (`collation`).
+- Исправлен SQL-запрос в Бэктесте (использование колонки `ts` вместо `date`).
+🎉 Поздравляю с завершением большого пути!
+Теперь, если вы или другой разработчик откроете репозиторий, вы сразу увидите, что это зрелый, профессиональный проект. У вас есть защита от зависаний, документация по «подводным камням» и четкий roadmap в истории изменений.
+
+## Кэширование и Cron (v2.2.0)
+Тяжелые страницы (Скринер, Точность) переведены на чтение JSON-кэшей.
+- `data/screener_cache.json` — генерируется скриптом `scripts/cron/refresh_screener.php`.
+- `data/accuracy_cache.json` — генерируется скриптом `scripts/cron/refresh_accuracy.php`.
+
+**Обязательные Cron-задачи:**
+0 3 * * * /usr/bin/php /path/to/project/scripts/cron/refresh_synthetic.php
+0 * * * * /usr/bin/php /path/to/project/scripts/cron/refresh_screener.php
+0 * * * * /usr/bin/php /path/to/project/scripts/cron/refresh_accuracy.php
+
+**Известные подводные камни:**
+1. В таблице `synthetic_components` колонка называется `trade_action` (а не `signal`).
+2. В таблице `history_bars` колонка с датой называется `ts` (а не `date`).
+3. При изменении кода может потребоваться сброс OPcache: `sudo systemctl restart php*-fpm`.
