@@ -43,4 +43,5 @@ logs/
 
 # ОС
 .DS_Store
-Thumbs.db
+Thumbs.dbconfig.php
+data/*.json

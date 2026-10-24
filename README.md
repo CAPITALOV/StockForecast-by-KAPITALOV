@@ -6,6 +6,12 @@
 [![PHP](https://img.shields.io/badge/PHP-7.4%2B-purple.svg)](https://php.net)
 [![MySQL](https://img.shields.io/badge/MySQL-5.7%2B-orange.svg)](https://mysql.com)
 
+### 📈 Линии прогнозов
+- **Линия 1 (Delta Close)**: Направление тренда цены закрытия.
+- **Линия 3 (RPO)**: Weighted average price.
+- **Линия 2 (Synthetic)**: Адаптивный синтетический индекс (Z-score + SMA-5). 
+  На графике отображает **торговые сигналы**: 🟢 `BUY` (точка разворота вверх на минимуме) и 🔴 `SELL` (точка разворота вниз на пике).
+
 ---
 
 ## 🎯 Что это
@@ -604,3 +610,68 @@ README покрывает:
 ✅ Известные ограничения (честно про long-only, токсичные тикеры, «не прогноз»)
 
 ✅ Roadmap (что в следующих версиях)
+
+восстановление системы после сбоя на сервере
+
+Скопируйте этот текст в конец README.md:
+markdown
+## 🚀 Развертывание и обновление (v2.1.0+)
+
+Если вы обновляете проект или разворачиваете его с нуля, выполните следующие шаги, чтобы активировать адаптивную Линию 2 и торговые сигналы.
+
+### Шаг 1. Обновление файлов
+Скачайте актуальные изменения из репозитория:
+```bash
+git pull origin master
+Убедитесь, что на месте новые файлы:
+
+lib/synthetic.php
+
+scripts/cron/refresh_synthetic.php
+
+обновленные index.php и pages/stock.php
+
+Шаг 2. Миграция базы данных
+Если таблицы synthetic_components еще нет, выполните следующий SQL-запрос в вашей базе данных (например, через phpMyAdmin):
+
+sql
+CREATE TABLE IF NOT EXISTS `synthetic_components` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `market` VARCHAR(16) NOT NULL,
+  `ticker` VARCHAR(32) NOT NULL,
+  `date` DATE NOT NULL,
+  `z1` DOUBLE NULL,
+  `z3` DOUBLE NULL,
+  `w1` DOUBLE NULL,
+  `w3` DOUBLE NULL,
+  `synthetic` DOUBLE NULL,
+  `dir1` TINYINT NULL,
+  `dir3` TINYINT NULL,
+  `trade_action` VARCHAR(16) NULL,
+  `confidence` DOUBLE NULL,
+  `computed_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY `uniq_ticker_date` (`market`, `ticker`, `date`),
+  KEY `idx_action` (`trade_action`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+Шаг 3. Первичный расчет
+Запустите скрипт, чтобы заполнить базу историей (займет около 30 секунд):
+
+bash
+php scripts/cron/refresh_synthetic.php
+Вы должны увидеть в терминале строки [OK] moex/LKOH — 1826 точек записано. и т.д.
+
+Шаг 4. Настройка Cron (Автообновление)
+Чтобы сигналы обновлялись каждый день, добавьте задачу в Cron:
+
+bash
+crontab -e
+Добавьте строку:
+
+text
+0 3 * * * /usr/bin/php /var/www/sotis.org/data/www/forecast.sotis.org/scripts/cron/refresh_synthetic.php >> /var/log/synthetic_refresh.log 2>&1
+Шаг 5. Очистка кэша
+Если на сайте не видно изменений, очистите кэш в админке (admin-clear-cache) или жестко обновите страницу (Ctrl + F5).
+
+text
+
+---
