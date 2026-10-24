@@ -3,6 +3,7 @@ require_once __DIR__ . '/../lib/screener.php';
 
 $days   = max(7, min(365, (int)($_GET['days'] ?? 30)));
 $market = in_array($_GET['market'] ?? '', ['moex','us'], true) ? $_GET['market'] : '';
+$signal = in_array($_GET['signal'] ?? '', ['buy','sell'], true) ? $_GET['signal'] : '';
 $sort   = in_array($_GET['sort'] ?? '', ['mape','hit','count','ticker'], true) ? $_GET['sort'] : 'mape';
 
 $from = date('Y-m-d', time() - $days * 86400);
@@ -10,7 +11,7 @@ $to   = date('Y-m-d');
 $fromLabel = date('d.m.Y', strtotime($from));
 $toLabel   = date('d.m.Y', strtotime($to));
 
-$results = screener_data($days, $market);
+$results = screener_data($days, $market, $signal);
 
 usort($results, function ($a, $b) use ($sort) {
     switch ($sort) {
@@ -41,6 +42,7 @@ unset($m);
 $csvQuery = http_build_query([
     'days' => $days,
     'market' => $market,
+    'signal' => $signal,
     'sort' => $sort,
 ]);
 ?>
@@ -94,6 +96,13 @@ $csvQuery = http_build_query([
             <option value="us"   <?= $market==='us'   ? 'selected' : '' ?>>US</option>
         </select>
     </label>
+    <label>Текущий сигнал:
+        <select name="signal" style="padding:8px;background:#131722;color:#e6e6e6;border:1px solid #2a2e39;border-radius:6px">
+            <option value=""     <?= $signal===''     ? 'selected' : '' ?>>Все</option>
+            <option value="buy"  <?= $signal==='buy'  ? 'selected' : '' ?>>🟢 Только BUY</option>
+            <option value="sell" <?= $signal==='sell' ? 'selected' : '' ?>>🔴 Только SELL</option>
+        </select>
+    </label>
     <label>Сортировка:
         <select name="sort" style="padding:8px;background:#131722;color:#e6e6e6;border:1px solid #2a2e39;border-radius:6px">
             <option value="mape"   <?= $sort==='mape'   ? 'selected' : '' ?>>по MAPE (лучшие)</option>
@@ -108,7 +117,10 @@ $csvQuery = http_build_query([
 <?php if (empty($results)): ?>
     <p class="warn">
         За период <b><?= h($fromLabel) ?> — <?= h($toLabel) ?></b> нет ни одного прогноза,
-        для которого нашёлся бы факт. Возможно, прогнозы в будущем или история ещё не загружена.
+        для которого нашёлся бы факт. 
+        <?php if ($signal !== ''): ?>
+            <br>Или ни один тикер не имеет текущий сигнал <b><?= strtoupper($signal) ?></b>.
+        <?php endif; ?>
         <br>Проверьте <a href="index.php?r=accuracy" style="color:#26a69a">Точность</a> →
         кнопку «Загрузить историю».
     </p>
@@ -134,6 +146,7 @@ $csvQuery = http_build_query([
             <th>#</th>
             <th>Биржа</th>
             <th>Тикер</th>
+            <th>Сигнал</th>
             <th>MAPE, %</th>
             <th>Hit-rate</th>
             <th>Точек</th>
@@ -146,11 +159,16 @@ $csvQuery = http_build_query([
         $cls = ($r['mape'] <= 2) ? 'status-ok' : (($r['mape'] > 5) ? 'status-no' : '');
         $hitPct = round($r['hit_rate'] * 100, 1);
         $hitCls = ($r['hit_rate'] >= 0.6) ? 'status-ok' : (($r['hit_rate'] < 0.4) ? 'status-no' : '');
+        
+        $sig = $r['current_signal'] ?? 'neutral';
+        $sigColor = $sig === 'buy' ? '#26a69a' : ($sig === 'sell' ? '#ef5350' : '#888');
+        $sigLabel = $sig === 'buy' ? '🟢 BUY' : ($sig === 'sell' ? '🔴 SELL' : '⚪ neutral');
     ?>
         <tr>
             <td><?= $i + 1 ?></td>
             <td><?= strtoupper(h($r['market'])) ?></td>
             <td><b><?= h($r['ticker']) ?></b></td>
+            <td style="color:<?= $sigColor ?>; font-weight:700"><?= $sigLabel ?></td>
             <td class="<?= $cls ?>"><?= $r['mape'] ?>%</td>
             <td class="<?= $hitCls ?>"><?= $hitPct ?>%</td>
             <td><?= (int)$r['count'] ?></td>

@@ -450,29 +450,46 @@ function renderForecastLines(lines) {
             })
         );
 
-        // ── ДОБАВЛЕНО: Отрисовка сигналов BUY/SELL для Линии 2 через функцию-генератор ──
+        // ── Отрисовка сигналов BUY/SELL с Тултипами ──
         if (line.line_num === 2) {
             s.bullets.push(function(root, series, dataItem) {
                 const ctx = dataItem.dataContext;
                 if (!ctx || (ctx.signal !== 'buy' && ctx.signal !== 'sell')) {
                     return am5.Bullet.new(root, { sprite: am5.Circle.new(root, { radius: 0 }) });
                 }
-                const fillColor = ctx.signal === 'buy' ? am5.color("#26a69a") : am5.color("#ef5350");
-                return am5.Bullet.new(root, {
-                    sprite: am5.Circle.new(root, {
-                        radius: 5,
-                        fill: fillColor,
-                        stroke: am5.color(isDarkTheme() ? "#131722" : "#ffffff"),
-                        strokeWidth: 1
-                    })
+                
+                const isBuy = ctx.signal === 'buy';
+                const fillColor = isBuy ? am5.color("#26a69a") : am5.color("#ef5350");
+                
+                const circle = am5.Circle.new(root, {
+                    radius: 6,
+                    fill: fillColor,
+                    stroke: am5.color(isDarkTheme() ? "#131722" : "#ffffff"),
+                    strokeWidth: 2
                 });
+
+                const confPct = Math.round((ctx.confidence || 0) * 100);
+                const w1Pct = Math.round((ctx.w1 || 0) * 100);
+                const w3Pct = 100 - w1Pct;
+                const actionText = isBuy ? "🟢 СИГНАЛ: КУПИТЬ" : "🔴 СИГНАЛ: ПРОДАТЬ";
+
+                circle.set("tooltipText", 
+                    `[bold]${actionText}[/]\n` +
+                    `Уверенность: [bold]${confPct}%[/]\n` +
+                    `Вес L1: ${w1Pct}% | Вес L3: ${w3Pct}%\n` +
+                    `Значение: ${ctx.value.toFixed(4)}`
+                );
+
+                return am5.Bullet.new(root, { sprite: circle });
             });
         }
 
         s.data.setAll(line.data.map(p => ({ 
             Date: toTs(p.time), 
             value: p.value,
-            signal: p.signal 
+            signal: p.signal,
+            confidence: p.confidence,
+            w1: p.w1
         })));
         forecastSeries.push(s);
     });

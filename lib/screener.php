@@ -1,19 +1,25 @@
 <?php
 /**
  * Screener — сводная точность по всем тикерам за период.
- * Возвращает массив: [['market', 'ticker', 'mape', 'hit_rate', 'count', 'best_line'], ...]
+ * Возвращает массив: [['market', 'ticker', 'mape', 'hit_rate', 'count', 'best_line', 'current_signal'], ...]
  */
-function screener_data(int $days = 30, string $market = ''): array {
+function screener_data(int $days = 30, string $market = '', string $signal_filter = ''): array {
     $from = date('Y-m-d', time() - $days * 86400);
     $to   = date('Y-m-d');
 
-    $sql = "SELECT DISTINCT market, ticker FROM forecast_lines";
+    $sql = "SELECT DISTINCT fl.market, fl.ticker,
+               (SELECT trade_action FROM synthetic_components sc 
+                WHERE sc.market = fl.market AND sc.ticker = fl.ticker 
+                ORDER BY sc.date DESC LIMIT 1) AS current_signal
+            FROM forecast_lines fl
+            WHERE 1=1";
+            
     $params = [];
     if ($market !== '') {
-        $sql .= " WHERE market = ?";
+        $sql .= " AND fl.market = ?";
         $params[] = $market;
     }
-    $sql .= " ORDER BY market, ticker";
+    $sql .= " ORDER BY fl.market, fl.ticker";
 
     $stmt = db()->prepare($sql);
     $stmt->execute($params);
@@ -22,6 +28,11 @@ function screener_data(int $days = 30, string $market = ''): array {
     $results = [];
 
     foreach ($tickers as $t) {
+        // Фильтрация по сигналу (если выбран в скринере)
+        if ($signal_filter !== '' && $t['current_signal'] !== $signal_filter) {
+            continue;
+        }
+
         $stmt = db()->prepare(
             "SELECT line_num, value_type, content FROM forecast_lines
              WHERE market = ? AND ticker = ?"
@@ -85,6 +96,7 @@ function screener_data(int $days = 30, string $market = ''): array {
                 'hit_rate'  => round($hits / $n, 4),
                 'count'     => $n,
                 'best_line' => $bestLine,
+                'current_signal' => $t['current_signal'] ?? 'neutral'
             ];
         }
     }
