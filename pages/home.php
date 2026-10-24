@@ -13,15 +13,40 @@ if ($q !== '') {
 $flash = get_flash();
 
 $forecastCount = 0; $stockMapCount = 0;
+$announcements = [];
+$breadthData = ['buy' => 0, 'sell' => 0, 'neutral' => 0];
+
 try {
     $pdo = db();
     $forecastCount = (int)$pdo->query("SELECT COUNT(*) FROM forecast_lines")->fetchColumn();
     $stockMapCount = (int)$pdo->query("SELECT COUNT(*) FROM stock_map")->fetchColumn();
     // Получаем 3 последних анонса
     $announcements = $pdo->query("SELECT title, content, created_at FROM announcements ORDER BY created_at DESC LIMIT 3")->fetchAll();
+
+    // ДОБАВЛЕНО: Считаем ширину рынка (Market Breadth)
+    $breadthSql = "WITH Latest AS (
+        SELECT market, ticker, trade_action, 
+               ROW_NUMBER() OVER(PARTITION BY market, ticker ORDER BY date DESC) as rn
+        FROM synthetic_components
+        WHERE market = ?
+    ) 
+    SELECT trade_action, COUNT(*) as cnt FROM Latest WHERE rn = 1 GROUP BY trade_action";
+    
+    $stmtBr = $pdo->prepare($breadthSql);
+    $stmtBr->execute([$market]);
+    foreach ($stmtBr->fetchAll() as $row) {
+        if (isset($breadthData[$row['trade_action']])) {
+            $breadthData[$row['trade_action']] = (int)$row['cnt'];
+        }
+    }
 } catch (Throwable $e) {
-    $announcements = [];
+    // Игнорируем ошибки, чтобы страница не падала
 }
+
+$totalSignals = array_sum($breadthData);
+$buyPct = $totalSignals > 0 ? round(($breadthData['buy'] / $totalSignals) * 100) : 0;
+$sellPct = $totalSignals > 0 ? round(($breadthData['sell'] / $totalSignals) * 100) : 0;
+$neutralPct = 100 - $buyPct - $sellPct;
 ?>
 <!doctype html>
 <html lang="ru">
@@ -73,6 +98,36 @@ try {
     </div>
 </section>
 
+<!-- ================= ДОБАВЛЕНО: ШИРИНА РЫНКА ================= -->
+<?php if ($totalSignals > 0): ?>
+<section class="section" style="padding-top: 0;">
+    <div class="card" style="background: linear-gradient(90deg, rgba(38,166,154,0.05) 0%, rgba(239,83,80,0.05) 100%); border-color: #2a2e39;">
+        <h3 style="margin-top:0">🌡️ Температура рынка (<?= strtoupper($market) ?>)</h3>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; font-weight:bold;">
+            <span style="color:#26a69a;">🟢 Покупать: <?= $breadthData['buy'] ?> (<?= $buyPct ?>%)</span>
+            <span style="color:#888;">⚪ Ждать: <?= $breadthData['neutral'] ?> (<?= $neutralPct ?>%)</span>
+            <span style="color:#ef5350;">🔴 Продавать: <?= $breadthData['sell'] ?> (<?= $sellPct ?>%)</span>
+        </div>
+        <!-- Визуальная полоска -->
+        <div style="height: 12px; border-radius: 6px; overflow: hidden; display: flex; background: #131722;">
+            <div style="width: <?= $buyPct ?>%; background: #26a69a; transition: width 0.5s;"></div>
+            <div style="width: <?= $neutralPct ?>%; background: #555;"></div>
+            <div style="width: <?= $sellPct ?>%; background: #ef5350; transition: width 0.5s;"></div>
+        </div>
+        <p class="muted" style="margin-top:12px; font-size:13px; margin-bottom:0;">
+            <?php if ($buyPct > 60): ?>
+                Рынок перепродан (много сигналов BUY). Возможна точка входа.
+            <?php elseif ($sellPct > 60): ?>
+                Рынок перекуплен (много сигналов SELL). Рекомендуется выйти в кэш.
+            <?php else: ?>
+                Рынок сбалансирован. Нет явного перевеса в ту или иную сторону.
+            <?php endif; ?>
+        </p>
+    </div>
+</section>
+<?php endif; ?>
+<!-- ============================================================ -->
+
 <!-- ================= НОВОСТИ И АНОНСЫ ================= -->
 <?php if (!empty($announcements)): ?>
 <section class="section" id="news-section">
@@ -96,7 +151,6 @@ try {
 </section>
 <?php endif; ?>
 
-<!-- ... (Остальные секции: Свежие попадания, Возможности, Как работает, Акции) ... -->
 <section id="features" class="section">
     <div class="section-head">
         <h2>Что внутри</h2>
@@ -124,6 +178,19 @@ try {
         <li><h3>Смотрите верификацию</h3><p>По каждой точке — прогноз, факт, отклонение и статус. CSV и PNG на экспорт.</p></li>
     </ol>
 </section>
+
+<!-- ================= ДОБАВЛЕНО: ИЗБРАННОЕ (WATCHLIST) ================= -->
+<section id="watchlist-section" class="section" style="display:none;">
+    <div class="section-head">
+        <h2>⭐ Моё избранное</h2>
+        <p>Акции, которые вы добавили в избранное на страницах графиков.</p>
+    </div>
+    <table class="stock-table" id="watchlist-table">
+        <thead><tr><th>Тикер</th><th>Название</th><th></th></tr></thead>
+        <tbody></tbody>
+    </table>
+</section>
+<!-- =================================================================== -->
 
 <section id="stocks" class="section section-stocks">
     <div class="section-head">
@@ -165,10 +232,11 @@ try {
     <a href="<?= is_admin() ? url('admin') : url('admin-login') ?>" style="color:#26a69a;text-decoration:none">Админка</a>
 </footer>
 <script>
+// ── Свежие попадания ──
 (function () {
     const section = document.getElementById('recent-hits-section');
     const box = document.getElementById('recent-hits-table');
-    if (!section || !box) return; // если блока нет, выходим
+    if (!section || !box) return;
     fetch('index.php?r=api-recent-hits&days=7&max_dev=2&limit=8', { cache: 'no-store' })
         .then(r => r.json())
         .then(j => {
@@ -195,6 +263,37 @@ try {
             section.style.display = '';
         })
         .catch(e => {});
+})();
+
+// ── ДОБАВЛЕНО: Рендер Watchlist ──
+(function() {
+    const wl = JSON.parse(localStorage.getItem('sf_watchlist') || '[]');
+    const currentMarket = <?= json_encode($market) ?>;
+    if (wl.length === 0) return;
+    
+    const section = document.getElementById('watchlist-section');
+    const tbody = document.querySelector('#watchlist-table tbody');
+    let html = '';
+    
+    // Берем список акций с сервера, чтобы найти названия
+    const allStocks = <?= json_encode(array_column($stocks, 'name', 'ticker')) ?>;
+    
+    wl.forEach(item => {
+        const [m, t] = item.split(':');
+        if (m === currentMarket) {
+            const name = allStocks[t] || '';
+            html += `<tr>
+                <td><b>${t}</b></td>
+                <td>${name}</td>
+                <td><a class="btn" href="index.php?r=stock&market=${m}&ticker=${t}">График →</a></td>
+            </tr>`;
+        }
+    });
+    
+    if (html) {
+        tbody.innerHTML = html;
+        section.style.display = '';
+    }
 })();
 </script>
 </body>

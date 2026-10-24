@@ -381,6 +381,7 @@ switch ($route) {
     case 'compare':     include __DIR__ . '/pages/compare.php'; break;
     case 'news':        include __DIR__ . '/pages/news.php'; break;
     case 'stock':       include __DIR__ . '/pages/stock.php'; break;
+    case 'signals':     include __DIR__ . '/pages/signals.php'; break; // <--- ДОБАВЛЕНО
     case 'admin-login': include __DIR__ . '/pages/admin-login.php'; break;
     case 'admin':       require_admin(); include __DIR__ . '/pages/admin.php'; break;
 

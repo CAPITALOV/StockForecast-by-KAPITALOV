@@ -83,6 +83,17 @@ $goldenStats = [
 <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:12px">
     <h1 style="margin-bottom:8px"><?= h($ticker) ?> <small>(<?= strtoupper(h($market)) ?>)</small></h1>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+        
+        <!-- Кнопка Избранное -->
+        <button type="button" id="btn-watchlist" class="btn" onclick="toggleWatchlist()">
+            <span id="watchlist-icon">☆</span> <span id="watchlist-text">В избранное</span>
+        </button>
+        
+        <!-- Кнопка История сигналов -->
+        <a href="index.php?r=signals&market=<?= h($market) ?>&ticker=<?= h($ticker) ?>" class="btn" style="background:rgba(245,158,11,0.15); color:#f59e0b; border:1px solid #f59e0b;">
+            📊 История сигналов
+        </a>
+
         <a class="btn" href="index.php?r=compare&market=<?= h($market) ?>&tickers=<?= h($ticker) ?>">Сравнить с другими</a>
         <a class="btn" href="index.php?r=export-verify&market=<?= h($market) ?>&ticker=<?= h($ticker) ?>">
             <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -277,6 +288,9 @@ let marketRegimeData = null;
 let globalMinDate = 0;
 let globalMaxDate = 0;
 
+// ДОБАВЛЕНО: Флаг для отображения всей истории
+window.showAllVerifyRows = false;
+
 function isDarkTheme() {
     if (document.body.classList.contains('dark')) return true;
     if (document.body.classList.contains('light')) return false;
@@ -450,7 +464,6 @@ function renderForecastLines(lines) {
             })
         );
 
-        // ── Отрисовка сигналов BUY/SELL с Тултипами ──
         if (line.line_num === 2) {
             s.bullets.push(function(root, series, dataItem) {
                 const ctx = dataItem.dataContext;
@@ -964,7 +977,30 @@ function renderVerification(lines) {
         const autoTag = line.computed ? ' <span class="muted">· авто</span>' : '';
 
         const v = line.verify || {};
-        html += `<h3 style="margin-top:28px;color:${line.color}">${line.name}${autoTag}</h3>`;
+        
+        // ДОБАВЛЕНО: Вычисляем обрезанный список строк (последние 30 дней + будущее)
+        let lastFactDate = new Date();
+        for (let i = v.rows.length - 1; i >= 0; i--) {
+            if (v.rows[i].fact !== null && v.rows[i].fact !== undefined) {
+                lastFactDate = new Date(v.rows[i].time);
+                break;
+            }
+        }
+        const cutoffDate = new Date(lastFactDate);
+        cutoffDate.setDate(cutoffDate.getDate() - 30);
+        const cutoffStr = cutoffDate.toISOString().slice(0, 10);
+
+        const filteredRows = v.rows.filter(r => {
+            if (window.showAllVerifyRows) return true;
+            const rDate = (r.time || '').slice(0, 10);
+            return rDate >= cutoffStr;
+        });
+
+        html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-top:28px">`;
+        html += `<h3 style="margin:0;color:${line.color}">${line.name}${autoTag}</h3>`;
+        html += `<button type="button" class="btn" style="font-size:12px;padding:4px 10px" onclick="toggleVerifyRows()">`;
+        html += window.showAllVerifyRows ? 'Скрыть старую историю' : 'Показать всю историю';
+        html += `</button></div>`;
 
         if (!v.rows || !v.rows.length) {
             html += '<p class="muted">Нет данных за выбранный период.</p>';
@@ -1001,7 +1037,8 @@ function renderVerification(lines) {
              +  '<th>Статус / Вектор</th>'
              +  '</tr></thead><tbody>';
 
-        for (const row of v.rows) {
+        // ДОБАВЛЕНО: Используем filteredRows вместо v.rows
+        for (const row of filteredRows) {
             const hasFact  = row.fact !== null && row.fact !== undefined;
             const isFuture = !hasFact || (row.status || '').indexOf('ожидается') !== -1;
 
@@ -1063,6 +1100,14 @@ function renderVerification(lines) {
     }
 
     box.innerHTML = html;
+}
+
+// ДОБАВЛЕНО: Функция переключения отображения всей истории
+function toggleVerifyRows() {
+    window.showAllVerifyRows = !window.showAllVerifyRows;
+    if (verifyData) {
+        renderVerification(verifyData);
+    }
 }
 
 let compareRoot = null;
@@ -1221,8 +1266,11 @@ async function loadCompareForecasts(days) {
 
 document.getElementById('btn-export-png').addEventListener('click', function () {
     try {
-        if (amRoot && amRoot.exporting) amRoot.exporting.export("png");
-        else alert('Экспорт недоступен.');
+        if (amRoot && amRoot.exporting) {
+            amRoot.exporting.export("png");
+        } else {
+            alert('Экспорт PNG недоступен.');
+        }
     } catch (e) { console.error(e); alert('Не удалось сохранить график.'); }
 });
 
@@ -1268,6 +1316,39 @@ document.getElementById('theme-toggle').addEventListener('click', function () {
 
 document.getElementById('chart-type').value = chartType;
 loadAll();
+
+// ── Логика Избранного (Watchlist) ──
+function getWatchlist() {
+    return JSON.parse(localStorage.getItem('sf_watchlist') || '[]');
+}
+
+function toggleWatchlist() {
+    const key = MARKET + ':' + TICKER;
+    let list = getWatchlist();
+    
+    if (list.includes(key)) {
+        list = list.filter(item => item !== key);
+    } else {
+        list.push(key);
+    }
+    
+    localStorage.setItem('sf_watchlist', JSON.stringify(list));
+    updateWatchlistButton();
+}
+
+function updateWatchlistButton() {
+    const key = MARKET + ':' + TICKER;
+    const list = getWatchlist();
+    const isInList = list.includes(key);
+    
+    const iconEl = document.getElementById('watchlist-icon');
+    const textEl = document.getElementById('watchlist-text');
+    if (iconEl) iconEl.textContent = isInList ? '⭐' : '☆';
+    if (textEl) textEl.textContent = isInList ? 'В избранном' : 'В избранное';
+}
+
+// Инициализация при загрузке
+document.addEventListener('DOMContentLoaded', updateWatchlistButton);
 </script>
 <script src="static/theme.js"></script>
 </main>
