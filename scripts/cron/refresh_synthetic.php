@@ -54,13 +54,9 @@ foreach ($tickers as $t) {
         if ($s) $byLine[(int)$r['line_num']] = $s;
     }
     
-    if (!isset($byLine[1], $byLine[3])) {
-        continue;
-    }
-
+    if (!isset($byLine[1], $byLine[3])) continue;
     $common = array_values(array_intersect(array_keys($byLine[1]), array_keys($byLine[3])));
     sort($common);
-    
     if (count($common) < 120) continue;
 
     $x1 = []; $x3 = [];
@@ -72,8 +68,6 @@ foreach ($tickers as $t) {
     $syntheticData = syn_build($common, $x1, $x3);
 
     $pdo->beginTransaction();
-    
-    // ИСПОЛЬЗУЕМ trade_action ВМЕСТО signal
     $ins = $pdo->prepare(
         "INSERT INTO synthetic_components 
          (market, ticker, date, z1, z3, w1, w3, synthetic, dir1, dir3, trade_action, confidence)
@@ -93,7 +87,6 @@ foreach ($tickers as $t) {
         ]);
     }
     $pdo->commit();
-    
     $totalProcessed++;
     echo "  [OK] {$market}/{$ticker} — " . count($syntheticData) . " точек записано.\n";
 }
