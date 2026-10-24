@@ -1,5 +1,4 @@
 <?php
-
 $market = $_GET['market'] ?? 'moex';
 $ticker = strtoupper($_GET['ticker'] ?? '');
 
@@ -22,12 +21,12 @@ $signals = $stmt->fetchAll();
 // Функция для получения цены закрытия на конкретную дату (или ближайшую после)
 function get_close_price($market, $ticker, $date, $offsetDays = 0) {
     $targetDate = date('Y-m-d', strtotime($date . ' +' . $offsetDays . ' days'));
-    // Ищем цену в history_bars через stock_map
+    // ИСПРАВЛЕНО: Используем колонку ts вместо date
     $sql = "SELECT hb.close 
             FROM history_bars hb
             JOIN stock_map sm ON sm.id = hb.stock_id
-            WHERE sm.market = ? AND sm.ticker = ? AND hb.date >= ?
-            ORDER BY hb.date ASC LIMIT 1";
+            WHERE sm.market = ? AND sm.ticker = ? AND hb.ts >= ?
+            ORDER BY hb.ts ASC LIMIT 1";
     $st = db()->prepare($sql);
     $st->execute([$market, $ticker, $targetDate]);
     return $st->fetchColumn();
