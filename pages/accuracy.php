@@ -1,48 +1,10 @@
 <?php
-$pdo = db();
+// Читаем готовый кэш (без обращения к тяжелым таблицам)
 $cacheFile = __DIR__ . '/../data/accuracy_cache.json';
+$cached = is_file($cacheFile) ? json_decode(file_get_contents($cacheFile), true) : null;
 
-$maxForecast = (string)$pdo->query("SELECT MAX(updated_at) FROM forecast_lines")->fetchColumn();
-$maxHistory  = (string)$pdo->query("SELECT MAX(updated_at) FROM history_bars")->fetchColumn();
-$cacheKey    = $maxForecast . '|' . $maxHistory;
-
-$all = null;
-$missing = [];
-if (is_file($cacheFile)) {
-    $cached = json_decode(file_get_contents($cacheFile), true);
-    if (is_array($cached) && ($cached['key'] ?? '') === $cacheKey) {
-        $all = $cached['all'];
-        $missing = $cached['missing'] ?? [];
-    }
-}
-
-if ($all === null) {
-    $rows = $pdo->query(
-        "SELECT market, ticker, line_num, value_type, content
-         FROM forecast_lines ORDER BY market, ticker, line_num"
-    )->fetchAll();
-
-    $all = []; $missing = [];
-    foreach ($rows as $r) {
-        $points = parse_forecast($r['content']);
-        $v = verify_forecast($r['market'], $r['ticker'], $points, $r['value_type']);
-        if ($v['count'] === 0) {
-            $missing[$r['market'] . ':' . $r['ticker']] = true;
-            continue;
-        }
-        $all[] = [
-            'market' => $r['market'], 'ticker' => $r['ticker'],
-            'line_num' => (int)$r['line_num'], 'value_type' => $r['value_type'],
-            'mape' => $v['mape'], 'hit_rate' => $v['hit_rate'], 'count' => $v['count'],
-        ];
-    }
-
-    @file_put_contents($cacheFile, json_encode([
-        'key' => $cacheKey,
-        'all' => $all,
-        'missing' => $missing,
-    ], JSON_UNESCAPED_UNICODE));
-}
+$all = $cached['all'] ?? [];
+$missing = $cached['missing'] ?? [];
 
 usort($all, function ($a, $b) { return ($a['mape'] ?? 9999) <=> ($b['mape'] ?? 9999); });
 
@@ -63,18 +25,24 @@ unset($m);
 
 $flash = get_flash();
 
-$pending = (int)db()->query(
-    "SELECT COUNT(DISTINCT CONCAT(fl.market, ':', fl.ticker))
-     FROM forecast_lines fl
-     LEFT JOIN stock_map sm ON sm.market = fl.market AND sm.ticker = fl.ticker
-     LEFT JOIN history_bars hb ON hb.stock_id = sm.id
-     WHERE hb.stock_id IS NULL
-       AND (sm.history_skip_until IS NULL OR sm.history_skip_until < NOW())"
-)->fetchColumn();
-
-$skipped = (int)db()->query(
-    "SELECT COUNT(*) FROM stock_map WHERE history_skip_until > NOW()"
-)->fetchColumn();
+// Быстрые запросы для проверки очереди истории
+$pending = 0;
+$skipped = 0;
+try {
+    $pdo = db();
+    $pending = (int)$pdo->query(
+        "SELECT COUNT(DISTINCT CONCAT(fl.market, ':', fl.ticker))
+         FROM forecast_lines fl
+         LEFT JOIN stock_map sm ON sm.market = fl.market AND sm.ticker = fl.ticker
+         LEFT JOIN history_bars hb ON hb.stock_id = sm.id
+         WHERE hb.stock_id IS NULL
+           AND (sm.history_skip_until IS NULL OR sm.history_skip_until < NOW())"
+    )->fetchColumn();
+    
+    $skipped = (int)$pdo->query(
+        "SELECT COUNT(*) FROM stock_map WHERE history_skip_until > NOW()"
+    )->fetchColumn();
+} catch (Throwable $e) {}
 ?>
 <!doctype html>
 <html lang="ru">
@@ -140,8 +108,8 @@ $skipped = (int)db()->query(
 
 <?php if (!$all): ?>
     <p class="warn">
-        Пока нет ни одного прогноза с пересечением по датам с фактической историей.
-        <?php if ($pending > 0): ?>Нажмите «Загрузить историю» выше.<?php endif; ?>
+        Кэш точности пуст. <br>
+        Запустите в терминале: <code>php scripts/cron/refresh_accuracy.php</code> для генерации данных.
     </p>
 <?php else: ?>
     <div class="cards" style="margin-bottom:24px">
@@ -221,7 +189,7 @@ $skipped = (int)db()->query(
                 }
                 j = await r.json();
             } catch (e) {
-                status.textContent = `Шаг ${iter}: ошибка сети (${e.message}). Повтор через 2 с…`;
+                status.textContent = `Шаг ${iter}: ошибка сети. Повтор через 2 с…`;
                 await new Promise(res => setTimeout(res, 2000));
                 iter--;
                 continue;
