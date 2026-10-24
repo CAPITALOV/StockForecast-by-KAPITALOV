@@ -28,10 +28,6 @@ foreach (lines_meta() as $num => $l) {
     ];
 }
 
-/* ← NEW: «золотые» тикеры — где паттерн разворота исторически прибылен.
- * Данные из golden-теста (без фильтра MA200 — консервативно).
- * line — на какой линии паттерн сильнее всего.
- */
 $goldenStats = [
     'us:C'    => ['line' => 3, 'n' => 277, 'win' => 60.6, 'pf' => 1.59, 'exp' => 0.336],
     'us:RTX'  => ['line' => 3, 'n' => 266, 'win' => 60.2, 'pf' => 1.49, 'exp' => 0.216],
@@ -246,7 +242,6 @@ const RSI_PERIOD = <?= (int)$rsiPeriod ?>;
 const IS_ADMIN = <?= is_admin() ? 'true' : 'false' ?>;
 const LINES_CONFIG = <?= json_encode($linesConfigForJs, JSON_UNESCAPED_UNICODE) ?>;
 
-/* ← NEW: данные о «золотых» тикерах */
 const GOLDEN_STATS = <?= json_encode($goldenStats, JSON_UNESCAPED_UNICODE) ?>;
 const GOLDEN_KEY = MARKET + ':' + TICKER.toUpperCase();
 const GOLDEN_INFO = GOLDEN_STATS[GOLDEN_KEY] || null;
@@ -454,7 +449,31 @@ function renderForecastLines(lines) {
                 tooltip: am5.Tooltip.new(amRoot, { labelText: line.name + ": {valueY.formatNumber('#.0000')}" }),
             })
         );
-        s.data.setAll(line.data.map(p => ({ Date: toTs(p.time), value: p.value })));
+
+        // ── ДОБАВЛЕНО: Отрисовка сигналов BUY/SELL для Линии 2 через функцию-генератор ──
+        if (line.line_num === 2) {
+            s.bullets.push(function(root, series, dataItem) {
+                const ctx = dataItem.dataContext;
+                if (!ctx || (ctx.signal !== 'buy' && ctx.signal !== 'sell')) {
+                    return am5.Bullet.new(root, { sprite: am5.Circle.new(root, { radius: 0 }) });
+                }
+                const fillColor = ctx.signal === 'buy' ? am5.color("#26a69a") : am5.color("#ef5350");
+                return am5.Bullet.new(root, {
+                    sprite: am5.Circle.new(root, {
+                        radius: 5,
+                        fill: fillColor,
+                        stroke: am5.color(isDarkTheme() ? "#131722" : "#ffffff"),
+                        strokeWidth: 1
+                    })
+                });
+            });
+        }
+
+        s.data.setAll(line.data.map(p => ({ 
+            Date: toTs(p.time), 
+            value: p.value,
+            signal: p.signal 
+        })));
         forecastSeries.push(s);
     });
 
@@ -671,9 +690,6 @@ async function loadVerification() {
     }
 }
 
-/* ============================================================
- * computeEntrySignalJs — «светофор» по тренду дельты
- * ============================================================ */
 function computeEntrySignalJs(rows, streakMin = 2) {
     if (!rows.length) {
         return { state: 'wait', label: 'Нет данных', reason: 'Мало точек для сигнала',
@@ -734,9 +750,6 @@ function computeEntrySignalJs(rows, streakMin = 2) {
              streak, last_trend: lastTrend, last_delta: lastDelta };
 }
 
-/* ============================================================
- * renderVerification — сводка + баннер-светофор + историческая точность
- * ============================================================ */
 function renderVerification(lines) {
     const box = document.getElementById('verify-container');
     if (!lines || !lines.length) {
@@ -753,7 +766,6 @@ function renderVerification(lines) {
 
     let html = '';
 
-    /* ─── СВОДНАЯ ТАБЛИЦА ────────────────────────────────────────── */
     if (visible.length >= 2) {
         const withData = visible.filter(l => (l.verify.count || 0) > 0);
         let bestLineNum = null;
@@ -817,8 +829,6 @@ function renderVerification(lines) {
         html += '</tbody></table></div>';
     }
 
-    /* ─── БАННЕР-СВЕТОФОР + ИСТОРИЧЕСКАЯ ТОЧНОСТЬ ────────────────── */
-    // ← NEW: для «золотых» тикеров используем ту линию, где паттерн сильнее
     const signalLineNum = GOLDEN_INFO ? GOLDEN_INFO.line : 1;
     const signalLine = visible.find(l => l.line_num === signalLineNum);
 
@@ -826,7 +836,6 @@ function renderVerification(lines) {
         const allRows = signalLine.verify.rows;
         const signal = computeEntrySignalJs(allRows);
 
-        // Найти корректный ближайший разворот в будущих
         if (signal.state === 'wait') {
             let lastRealIndex = -1;
             for (let i = allRows.length - 1; i >= 0; i--) {
@@ -849,7 +858,6 @@ function renderVerification(lines) {
             }
         }
 
-        // Фильтр по MA200
         if (signal.state === 'buy' && marketRegime === false) {
             signal.state = 'wait';
             signal.label = 'Ждать (индекс в даунтренде)';
@@ -871,7 +879,6 @@ function renderVerification(lines) {
                           : signal.state === 'avoid' ? '#ef5350'
                           : '#ffa726';
 
-        // ← NEW: заголовок баннера — добавить название линии для «золотых»
         let bannerTitle = signal.label;
         if (GOLDEN_INFO) {
             const lineName = signalLineNum === 3 ? 'RPO' : (signalLineNum === 2 ? 'Synthetic' : 'Delta Close');
@@ -891,12 +898,10 @@ function renderVerification(lines) {
         }
         html += `</div>`;
 
-        // ← NEW: БЛОК «ИСТОРИЧЕСКАЯ ТОЧНОСТЬ» для «золотых» тикеров
         if (GOLDEN_INFO) {
             const gi = GOLDEN_INFO;
             const lineName = gi.line === 3 ? 'RPO' : (gi.line === 2 ? 'Synthetic' : 'Delta Close');
             const expSign = gi.exp >= 0 ? '+' : '';
-            // Цвет бейджа — по PF
             const badgeColor = gi.pf >= 1.5 ? '#26a69a' : (gi.pf >= 1.3 ? '#ffa726' : '#888');
 
             html += `<div style="margin-top:14px;padding:14px 16px;background:rgba(38,166,154,0.08);border-left:3px solid ${badgeColor};border-radius:6px">`;
@@ -923,7 +928,6 @@ function renderVerification(lines) {
             html += `</div>`;
         }
 
-        // Показать рыночный режим
         if (marketRegimeData) {
             const regimeColor = marketRegime ? '#26a69a' : '#ef5350';
             const regimeLabel = marketRegime ? '↑ индекс выше MA200' : '↓ индекс ниже MA200';
@@ -938,7 +942,6 @@ function renderVerification(lines) {
         html += `</div></div></div>`;
     }
 
-    /* ─── ДЕТАЛЬНЫЕ ТАБЛИЦЫ ─────────────────────────────────────── */
     for (const line of visible) {
         const cfg = LINES_CONFIG[line.line_num];
         const autoTag = line.computed ? ' <span class="muted">· авто</span>' : '';
