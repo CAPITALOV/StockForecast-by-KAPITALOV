@@ -17,11 +17,11 @@
 - `screener` — `pages/screener.php`
 - `accuracy` — `pages/accuracy.php`
 - `compare` — `pages/compare.php`
+- `signals` — `pages/signals.php` (новое в v2.2.0)
 - `admin` / `admin-login` / `admin-settings` — `pages/admin*.php`
 
 API-запросы (`?r=api-*`) обрабатываются в `index.php` и отдают JSON.
-Миграции — `bootstrap.php`. Фоновые задачи — `cron/`.
-Конфиг — `config.php` (копируется из `config.example.php`).
+Миграции — `bootstrap.php`. Фоновые задачи — `scripts/cron/`. Конфиг — `config.php` (копируется из `config.example.php`).
 
 ### Структура каталогов
 
@@ -29,22 +29,23 @@ API-запросы (`?r=api-*`) обрабатываются в `index.php` и �
 - `bootstrap.php` — миграции БД
 - `config.php` — конфиг (не в git)
 - `config.example.php` — шаблон конфига
-- `pages/` — home, stock, news, screener, accuracy, compare, admin
+- `pages/` — home, stock, news, screener, accuracy, compare, signals, admin
 - `lib/api.php` — загрузка истории (MOEX ISS, Yahoo, Stooq)
 - `lib/verify.php` — `forecast_to_price()`, `verify_forecast()`
 - `lib/screener.php` — `screener_data()`
+- `lib/synthetic.php` — адаптивная Линия 2 (Z-score, SMA-5, веса)
 - `lib/news.php` — `get_financial_news()`
 - `lib/settings.php` — `get_setting()` / `set_setting()`
 - `lib/helpers.php` — `h()`, `url()`, `is_admin()`
-- `cron/` — бэкфилл истории, проверка попаданий
+- `scripts/cron/` — `refresh_synthetic.php`, `refresh_screener.php`, `refresh_accuracy.php`
+- `scripts/deploy/` — `restore_stockforecast.sh`, `check_health.sh`, `README.md`
 - `static/style.css` — общие стили и `@font-face` Inter
 - `static/theme.js` — переключатель тем (`data-theme`)
 - `static/legend.svg` — SVG-легенда для README
 - `static/fonts/InterVariable.woff2` — локальный вариативный Inter
 - `static/uploads/` — картинки к анонсам (`.gitignore`)
-- `data/` — кэши, права 775
-- `VERSION`, `CHANGELOG.md`, `DEVELOPMENT.md`, `PROJECT_HISTORY.md`, `SECURITY.md`, `README.md`
-- `favicon.ico`, `favicon-16x16.png`, `favicon-32x32.png`, `apple-touch-icon.png`, `android-chrome-*.png`
+- `data/` — кэши (`screener_cache.json`, `accuracy_cache.json`), права 775
+- `VERSION`, `CHANGELOG.md`, `DEVELOPMENT.md`, `PROJECT_HISTORY.md`, `SECURITY.md`, `README.md`, `AI_CONTEXT.md`
 
 ### Стек
 
@@ -98,7 +99,7 @@ Frontend, нижняя панель и сравнение: amCharts 5 (RSI, MACD
 
 Реализация — `lib/verify.php`, функция `forecast_to_price()`.
 
-## 4. Верификация прогнозов (v1.24.0)
+## 4. Верификация прогнозов (v2.2.0)
 
 ### Логика проверки (Правило 50%)
 
@@ -123,14 +124,15 @@ Frontend, нижняя панель и сравнение: amCharts 5 (RSI, MACD
 
 ## 5. База данных
 
-- `history_bars` — `ticker_id`, `date`, `open`, `high`, `low`, `close`, `volume`. Уникальный `(ticker_id, date)`.
-- `forecasts` — `ticker_id`, `line_num`, `date`, `value`, `value_type`. Уникальный `(ticker_id, line_num, date)`.
-- `tickers` — `id`, `market`, `ticker`, `name`.
+- `history_bars` — `stock_id`, `ts`, `open`, `high`, `low`, `close`, `volume`. Уникальный `(stock_id, ts)`.
+- `forecast_lines` — `market`, `ticker`, `line_num`, `date`, `value`, `value_type`. Уникальный `(market, ticker, line_num)`.
+- `synthetic_components` — `market`, `ticker`, `date`, `z1`, `z3`, `w1`, `w3`, `synthetic`, `dir1`, `dir3`, `trade_action`, `confidence`. Уникальный `(market, ticker, date)`.
+- `stock_map` — `id`, `market`, `ticker`, `name`.
 - `settings` — `key`, `value`.
 - `announcements` — новости/анонсы, с колонкой `image`.
-- `users` — `id`, `login`, `password_hash`, `is_admin`.
+- `admins` — `id`, `login`, `password_hash`, `is_admin`.
 
-Кэши вне БД: `data/news_cache.json` — новости, TTL 15 минут.
+Кэши вне БД: `data/screener_cache.json`, `data/accuracy_cache.json`, `data/news_cache.json` (TTL 15 минут).
 
 ## 6. Frontend (pages/stock.php)
 
@@ -179,7 +181,7 @@ Frontend, нижняя панель и сравнение: amCharts 5 (RSI, MACD
 
 Требования:
 
-- PHP 7.4+, MySQL 5.7+ / MariaDB 10.3+
+- PHP **8.4+**, MySQL **8.0+** / MariaDB 10.3+
 - Расширения: `pdo_mysql`, `mbstring`, `curl`, `fileinfo`
 - Права на `data/` и `static/uploads/` — 775, владелец = PHP-процесс
 - Права на `static/fonts/` и `*.woff2` — 644
@@ -214,6 +216,13 @@ Frontend, нижняя панель и сравнение: amCharts 5 (RSI, MACD
 - Этап 3: двухосевой график сравнения Delta + Price (v1.23.0)
 - Логика верификации «Правило 50%» + Корреляция Пирсона (v1.23.0)
 - Визуальные маркеры статусов на графике сравнения + колонка Дельта (v1.24.0)
+- Адаптивная Линия 2 (Synthetic) — Z-score, SMA-5, веса (v2.1.0)
+- Торговые сигналы BUY/SELL на графике (v2.1.0)
+- JSON-кэширование для Скринера и Точности (v2.2.0)
+- Страница «История сигналов» (v2.2.0)
+- Индикатор «Ширина рынка» (v2.2.0)
+- Избранное (Watchlist) (v2.2.0)
+- Универсальные скрипты `restore_stockforecast.sh` и `check_health.sh` (v2.2.0)
 
 Осталось:
 
@@ -235,171 +244,3 @@ Frontend, нижняя панель и сравнение: amCharts 5 (RSI, MACD
 - Inter (GitHub): https://github.com/rsms/inter
 - PROJECT_HISTORY.md — история вех и критических багов
 - SECURITY.md — политика безопасности
-
-## Архитектура Линии 2 (Synthetic Adaptive)
-
-С версии v2.1.0 Линия 2 больше не является простым средним Линий 1 и 3. 
-Теперь это **адаптивный индекс уверенности**, который рассчитывается на бэкенде (PHP) и сохраняется в БД.
-
-### Математика (`lib/synthetic.php`):
-1. **Сглаживание (SMA-5)**: Убирает ежедневный рыночный шум.
-2. **Z-score (окно 60 дней)**: Нормализует значения Линий 1 и 3 к единому масштабу.
-3. **Адаптивные веса**: Система оценивает историческую точность (Hit-rate) каждой линии за последние 60 дней и дает больший вес той линии, которая сейчас точнее.
-4. **Генерация сигнала**: Если Z-score ниже -0.5, а тренд дельты (за 5 дней) пошел вверх — генерируется сигнал `buy`. Если Z-score выше 0.5, а тренд вниз — `sell`.
-
-### Интеграция:
-- **`synthetic_components`**: Таблица в MySQL, хранит `z1`, `z3`, `w1`, `w3`, итоговый `synthetic`, `trade_action` и `confidence`.
-- **`api-forecast`**: Отдает Линию 2 вместе с массивом сигналов на фронтенд.
-- **`pages/stock.php`**: Использует `am5.Bullet` для отрисовки точек BUY/SELL поверх оранжевой линии.
-
-### Как обновить данные (Cron):
-Расчеты выполняются скриптом `scripts/cron/refresh_synthetic.php`. 
-На сервере должна быть настроена задача Cron:
-`0 3 * * * php /path/to/project/scripts/cron/refresh_synthetic.php >> /var/log/synthetic_refresh.log 2>&1`
-
-Скопируйте этот текст в конец README.md:
-markdown
-## 🚀 Развертывание и обновление (v2.1.0+)
-
-Если вы обновляете проект или разворачиваете его с нуля, выполните следующие шаги, чтобы активировать адаптивную Линию 2 и торговые сигналы.
-
-### Шаг 1. Обновление файлов
-Скачайте актуальные изменения из репозитория:
-```bash
-git pull origin master
-Убедитесь, что на месте новые файлы:
-
-lib/synthetic.php
-
-scripts/cron/refresh_synthetic.php
-
-обновленные index.php и pages/stock.php
-
-Шаг 2. Миграция базы данных
-Если таблицы synthetic_components еще нет, выполните следующий SQL-запрос в вашей базе данных (например, через phpMyAdmin):
-
-sql
-CREATE TABLE IF NOT EXISTS `synthetic_components` (
-  `id` INT AUTO_INCREMENT PRIMARY KEY,
-  `market` VARCHAR(16) NOT NULL,
-  `ticker` VARCHAR(32) NOT NULL,
-  `date` DATE NOT NULL,
-  `z1` DOUBLE NULL,
-  `z3` DOUBLE NULL,
-  `w1` DOUBLE NULL,
-  `w3` DOUBLE NULL,
-  `synthetic` DOUBLE NULL,
-  `dir1` TINYINT NULL,
-  `dir3` TINYINT NULL,
-  `trade_action` VARCHAR(16) NULL,
-  `confidence` DOUBLE NULL,
-  `computed_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY `uniq_ticker_date` (`market`, `ticker`, `date`),
-  KEY `idx_action` (`trade_action`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-Шаг 3. Первичный расчет
-Запустите скрипт, чтобы заполнить базу историей (займет около 30 секунд):
-
-bash
-php scripts/cron/refresh_synthetic.php
-Вы должны увидеть в терминале строки [OK] moex/LKOH — 1826 точек записано. и т.д.
-
-Шаг 4. Настройка Cron (Автообновление)
-Чтобы сигналы обновлялись каждый день, добавьте задачу в Cron:
-
-bash
-crontab -e
-Добавьте строку:
-
-text
-0 3 * * * /usr/bin/php /var/www/sotis.org/data/www/forecast.sotis.org/scripts/cron/refresh_synthetic.php >> /var/log/synthetic_refresh.log 2>&1
-Шаг 5. Очистка кэша
-Если на сайте не видно изменений, очистите кэш в админке (admin-clear-cache) или жестко обновите страницу (Ctrl + F5).
-
-text
-
----
-
-# Руководство разработчика (Архитектура и Troubleshooting)
-
-## 🏗️ Архитектура данных и кэширования
-Из-за большого объема данных (история цен, расчет верификации для 100+ тикеров) прямые запросы в БД вызывали ошибки `504 Gateway Timeout`. 
-Мы внедрили **фоновое кэширование**:
-- `data/screener_cache.json` — кэш для Скринера.
-- `data/accuracy_cache.json` — кэш для страницы Точности.
-- `data/synthetic_components` (Таблица БД) — кэш сигналов и весов Линии 2.
-
-**Важно:** Страницы `pages/screener.php` и `pages/accuracy.php` **НЕ ДЕЛАЮТ** тяжелых запросов. Они просто читают JSON-файлы. Если данные не обновляются — проверьте Cron!
-
-## ⏱️ Cron-задачи (Обязательно к настройке на сервере)
-В `crontab` должны быть следующие задачи:
-```text
-# Пересчет синтетических сигналов (BUY/SELL) каждую ночь в 3:00
-0 3 * * * /usr/bin/php /path/to/project/scripts/cron/refresh_synthetic.php >> /var/log/synthetic_refresh.log 2>&1
-
-# Обновление кэша Скринера каждый час
-0 * * * * /usr/bin/php /path/to/project/scripts/cron/refresh_screener.php >> /var/log/screener_refresh.log 2>&1
-
-# Обновление кэша Точности каждый час
-0 * * * * /usr/bin/php /path/to/project/scripts/cron/refresh_accuracy.php >> /var/log/accuracy_refresh.log 2>&1
-
-⚠️ Известные «подводные камни» (Troubleshooting)
-Ошибка Unknown column 'signal'
-В MySQL слово signal зарезервировано. В таблице synthetic_components колонка называется trade_action. Не переименовывайте её в signal.
-
-Ошибка Unknown column 'hb.date'
-В таблице history_bars колонка с датой называется ts (timestamp), а не date. Всегда используйте ts в SQL-запросах.
-
-Ошибка Illegal mix of collations
-Все таблицы должны иметь кодировку utf8mb4_unicode_ci. Если создаете новые таблицы — указывайте её явно.
-
-Ошибка 504 Timeout после обновления кода
-PHP OPcache может держать старый код в памяти. Если изменения не применяются, выполните: sudo systemctl restart php*-fpm.
-
-📂 Структура ключевых файлов
-lib/synthetic.php — ядро математики Линии 2 (Z-score, SMA-5, веса).
-
-lib/screener.php — логика чтения кэша Скринера и генерации screener_cache.json.
-
-pages/stock.php — график акции (amCharts), тултипы, кнопка Избранного.
-
-pages/signals.php — страница Бэктеста (история сигналов и доходность).
-
-text
-
----
-
-### Шаг 5. Обновляем `CHANGELOG.md`
-Добавьте в самый верх:
-
-```markdown
-## [2.2.0] - 2026-10-25
-### Added
-- Страница «История сигналов» (Бэктест доходности).
-- Индикатор «Ширина рынка» (Market Breadth) на главной.
-- Функционал «Избранное» (Watchlist) на базе localStorage.
-- Тултипы с уверенностью для сигналов на графике.
-- Фильтр по сигналам в Скринере.
-
-### Fixed
-- **Критический фикс**: Устранены зависания сервера (504) на страницах Скринера и Точности благодаря переходу на JSON-кэширование.
-- Исправлен расчет `Hit-rate` (ранее показывал фейковые 100%).
-- Исправлен конфликт кодировок MySQL (`collation`).
-- Исправлен SQL-запрос в Бэктесте (использование колонки `ts` вместо `date`).
-🎉 Поздравляю с завершением большого пути!
-Теперь, если вы или другой разработчик откроете репозиторий, вы сразу увидите, что это зрелый, профессиональный проект. У вас есть защита от зависаний, документация по «подводным камням» и четкий roadmap в истории изменений.
-
-## Кэширование и Cron (v2.2.0)
-Тяжелые страницы (Скринер, Точность) переведены на чтение JSON-кэшей.
-- `data/screener_cache.json` — генерируется скриптом `scripts/cron/refresh_screener.php`.
-- `data/accuracy_cache.json` — генерируется скриптом `scripts/cron/refresh_accuracy.php`.
-
-**Обязательные Cron-задачи:**
-0 3 * * * /usr/bin/php /path/to/project/scripts/cron/refresh_synthetic.php
-0 * * * * /usr/bin/php /path/to/project/scripts/cron/refresh_screener.php
-0 * * * * /usr/bin/php /path/to/project/scripts/cron/refresh_accuracy.php
-
-**Известные подводные камни:**
-1. В таблице `synthetic_components` колонка называется `trade_action` (а не `signal`).
-2. В таблице `history_bars` колонка с датой называется `ts` (а не `date`).
-3. При изменении кода может потребоваться сброс OPcache: `sudo systemctl restart php*-fpm`.
