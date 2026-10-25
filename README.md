@@ -1,3 +1,18 @@
+Судя по тексту, который вы прислали, **README на GitHub сейчас выглядит обрезанным**. В нём есть заголовок, бейджи, раздел про обновление v2.2.0 и Cron-задачи, но **отсутствуют ключевые разделы**:
+- «Что это» (описание проекта)
+- «Что умеет» (список возможностей)
+- «Развертывание и обновление» (установка)
+- «Скрипты развертывания и диагностики»
+- «Документация» (ссылки на AI_CONTEXT, DEVELOPMENT и т.д.)
+- «Структура проекта»
+
+Похоже, что при вставке произошёл сбой, и файл сохранился не полностью.
+
+Давайте исправим это. Вот **полный финальный текст `README.md`**, который нужно вставить. Он содержит все необходимые разделы, актуальные бейджи и ссылки.
+
+### 📝 Полный текст `README.md` (замените им текущее содержимое на GitHub)
+
+```markdown
 # 📈 StockForecast
 
 > Векторная система верификации прогнозов и индикатор импульса для акций MOEX и US-рынка.
@@ -26,44 +41,51 @@
    0 * * * * /usr/bin/php /path/to/project/scripts/cron/refresh_screener.php
    # Обновление кэша Точности (каждый час)
    0 * * * * /usr/bin/php /path/to/project/scripts/cron/refresh_accuracy.php
-   
-🎯 Что это
-StockForecast — система анализа импульса тренда на основе трёх независимых индикаторов (Delta Close, Synthetic Adaptive, RPO). Показывает не «прогноз цены», а направление и силу текущего движения, плюс — историческую точность этих сигналов на 13-летней истории.
+   ```
 
-Главное отличие от обычных прогнозных сервисов: мы честно измеряем качество. Модель может ошибаться — и вы это увидите (Pearson, PF, win-rate). Не обещаем «золотых гор», показываем статистику и контекст.
+### ⚠️ Известные «подводные камни» (Troubleshooting v2.2.0):
+- **Ошибка `Unknown column 'signal'`**: В таблице `synthetic_components` колонка называется **`trade_action`** (слово `signal` зарезервировано в MySQL).
+- **Ошибка `Unknown column 'hb.date'`**: В таблице `history_bars` колонка с датой называется **`ts`**. Используйте `hb.ts` в SQL.
+- **Ошибка `Illegal mix of collations`**: Убедитесь, что все таблицы имеют кодировку `utf8mb4_unicode_ci`.
+- **Код не обновляется**: После правки PHP-файлов может потребоваться сброс OPcache: `sudo systemctl restart php*-fpm`.
 
-📊 Что умеет
-Три линии прогноза на графике цены: Delta Close (красная), Synthetic Adaptive (оранжевая), RPO (синяя).
+---
 
-Векторная верификация — сравнение прогноза с реальным движением, а не с ценой.
+## 🎯 Что это
 
-Тренд дельты (стрелки ↑/↓) — ускорение или замедление сигнала.
+StockForecast — система анализа **импульса тренда** на основе трёх независимых индикаторов (Delta Close, Synthetic Adaptive, RPO). Показывает не «прогноз цены», а **направление и силу текущего движения**, плюс — историческую точность этих сигналов на 13-летней истории.
 
-Баннер-светофор на странице тикера: 🟢 Покупать / 🟡 Ждать / 🔴 Не покупать.
+**Главное отличие от обычных прогнозных сервисов:** мы честно измеряем качество. Модель может ошибаться — и вы это увидите (Pearson, PF, win-rate). Не обещаем «золотых гор», показываем **статистику** и **контекст**.
 
-MA200-фильтр — блокирует BUY, если рынок в даунтренде.
+---
 
-Плашка «Историческая точность» для 8 «золотых» тикеров.
+## 📊 Что умеет
 
-CLI-аудит всех тикеров с Money Metrics (PF, Exp, WinRate).
+- **Три линии прогноза** на графике цены: Delta Close (красная), Synthetic Adaptive (оранжевая), RPO (синяя).
+- **Векторная верификация** — сравнение прогноза с реальным движением, а не с ценой.
+- **Тренд дельты** (стрелки ↑/↓) — ускорение или замедление сигнала.
+- **Баннер-светофор** на странице тикера: 🟢 Покупать / 🟡 Ждать / 🔴 Не покупать.
+- **MA200-фильтр** — блокирует BUY, если рынок в даунтренде.
+- **Плашка «Историческая точность»** для 8 «золотых» тикеров.
+- **CLI-аудит** всех тикеров с Money Metrics (PF, Exp, WinRate).
+- **Screener** и **CSV-экспорт** для внешнего анализа.
+- **История сигналов (Бэктест)** — просмотр доходности после каждого сигнала.
+- **Ширина рынка (Market Breadth)** — глобальный индикатор «температуры» рынка.
+- **Избранное** — сохранение интересных тикеров в личный список.
 
-Screener и CSV-экспорт для внешнего анализа.
+---
 
-История сигналов (Бэктест) — просмотр доходности после каждого сигнала.
+## 🚀 Развертывание и обновление
 
-Ширина рынка (Market Breadth) — глобальный индикатор «температуры» рынка.
+### Требования
 
-Избранное — сохранение интересных тикеров в личный список.
+- PHP **8.4+** (рекомендуется 8.4 или 8.5)
+- MySQL **8.0+**
+- Composer не нужен — чистый PHP без зависимостей
 
-🚀 Развертывание и обновление
-Требования
-PHP 8.4+ (рекомендуется 8.4 или 8.5)
+### Развёртывание
 
-MySQL 8.0+
-
-Composer не нужен — чистый PHP без зависимостей
-
-Развёртывание
+```bash
 # 1. Клонировать
 git clone https://github.com/CAPITALOV/StockForecast-by-KAPITALOV.git
 cd StockForecast-by-KAPITALOV
@@ -78,84 +100,57 @@ mysql -u USER -p DBNAME < migrations/001_initial.sql
 # 4. Права на запись
 chmod -R 775 data/ static/uploads/
 chown -R www-data:www-data data/ static/uploads/
+```
 
-Восстановление после сбоя
+### Восстановление после сбоя
+
 Используйте универсальный скрипт (сам определит пути и окружение):
-
+```bash
 sudo bash <(curl -s https://raw.githubusercontent.com/CAPITALOV/StockForecast-by-KAPITALOV/main/scripts/deploy/restore_stockforecast.sh)
+```
 
-Проверка здоровья
+### Проверка здоровья
+
+```bash
 sudo bash <(curl -s https://raw.githubusercontent.com/CAPITALOV/StockForecast-by-KAPITALOV/main/scripts/deploy/check_health.sh)
+```
 
-🛠️ Скрипты развертывания и диагностики
+---
+
+## 🛠️ Скрипты развертывания и диагностики
+
 В проекте есть два универсальных bash-скрипта, которые работают на любом сервере:
 
-Скрипт	Назначение	Как запустить
-restore_stockforecast.sh	Восстановление проекта с нуля (код, права, Cron, кэши)	sudo bash <(curl -s https://raw.githubusercontent.com/CAPITALOV/StockForecast-by-KAPITALOV/main/scripts/deploy/restore_stockforecast.sh)
-check_health.sh	Проверка «здоровья» сайта (файлы, БД, кэши, Cron, HTTP)	sudo bash <(curl -s https://raw.githubusercontent.com/CAPITALOV/StockForecast-by-KAPITALOV/main/scripts/deploy/check_health.sh)
-📖 Подробная инструкция: scripts/deploy/README.md
+| Скрипт | Назначение | Как запустить |
+|---|---|---|
+| **restore_stockforecast.sh** | Восстановление проекта с нуля (код, права, Cron, кэши) | `sudo bash <(curl -s https://raw.githubusercontent.com/CAPITALOV/StockForecast-by-KAPITALOV/main/scripts/deploy/restore_stockforecast.sh)` |
+| **check_health.sh** | Проверка «здоровья» сайта (файлы, БД, кэши, Cron, HTTP) | `sudo bash <(curl -s https://raw.githubusercontent.com/CAPITALOV/StockForecast-by-KAPITALOV/main/scripts/deploy/check_health.sh)` |
 
-📚 Структура проекта
-StockForecast/
-├── bin/
-│   └── audit_lines.php        # CLI-аудит
-├── lib/
-│   ├── api.php                # MOEX ISS + Yahoo Finance
-│   ├── forecast.php           # 3 линии + метаданные
-│   ├── history.php            # загрузка/сохранение баров
-│   ├── import.php             # импорт CSV
-│   ├── indicators.php         # RSI, MA, MACD, Bollinger
-│   ├── news.php               # новости
-│   ├── screener.php           # screener по тикерам
-│   ├── synthetic.php          # адаптивная Линия 2
-│   ├── telegram.php           # уведомления
-│   └── verify.php             # векторная верификация
-├── pages/
-│   ├── home.php
-│   ├── stock.php              # ← баннер, светофор, MA200
-│   ├── admin.php
-│   ├── admin-login.php
-│   ├── accuracy.php
-│   ├── compare.php
-│   ├── news.php
-│   ├── screener.php
-│   └── signals.php            # ← Бэктест сигналов
-├── scripts/
-│   ├── cron/
-│   │   ├── refresh_synthetic.php
-│   │   ├── refresh_screener.php
-│   │   └── refresh_accuracy.php
-│   └── deploy/
-│       ├── restore_stockforecast.sh
-│       ├── check_health.sh
-│       └── README.md
-├── data/                      # кэши (не в git)
-├── static/
-│   ├── style.css
-│   ├── theme.js
-│   └── fonts/
-├── index.php                  # роутер
-├── bootstrap.php              # инициализация
-├── config.php                 # настройки (не в git)
-├── AI_CONTEXT.md              # контекст для AI/разработчика
-├── CHANGELOG.md
-├── DEVELOPMENT.md
-├── PROJECT_HISTORY.md
-├── SECURITY.md
-└── README.md
-🤝 Вклад
+📖 **Подробная инструкция:** [scripts/deploy/README.md](scripts/deploy/README.md)
 
-Это pet-проект. PR и issue приветствуются, но без гарантий по срокам.
+---
 
-Особенно интересует:
+## 📚 Документация
 
-Идеи по улучшению моделей (не только Delta / RPO)
+- [AI_CONTEXT.md](AI_CONTEXT.md) — контекст для AI-ассистентов и новых разработчиков.
+- [DEVELOPMENT.md](DEVELOPMENT.md) — руководство разработчика (архитектура, API, подводные камни).
+- [PROJECT_HISTORY.md](PROJECT_HISTORY.md) — история проекта и ключевые вехи.
+- [CHANGELOG.md](CHANGELOG.md) — список изменений по версиям.
+- [SECURITY.md](SECURITY.md) — политика безопасности.
 
-Бэктесты на новых тикерах или периодах
+---
 
-Оптимизация адаптивного Line 2
+## 📄 Лицензия
 
-📄 Лицензия
 Свободное использование в личных и образовательных целях. Не является финансовой рекомендацией.
 
-Автор не несёт ответственности за потери от использования сигналов. Модель — индикатор, не «гарантия прибыли». 
+Автор не несёт ответственности за потери от использования сигналов. Модель — индикатор, не «гарантия прибыли».
+```
+
+### 🚀 Как применить
+
+1.  Откройте файл `README.md` в режиме редактирования на GitHub (по вашей ссылке).
+2.  Выделите всё содержимое (Ctrl+A) и замените его на этот полный текст.
+3.  Внизу страницы в поле «Commit changes» напишите сообщение (например, `docs: восстановление полного README для v2.2.0`) и нажмите **Commit changes**.
+
+После этого README будет содержать все разделы, и страница репозитория будет выглядеть полноценно. 🚀
