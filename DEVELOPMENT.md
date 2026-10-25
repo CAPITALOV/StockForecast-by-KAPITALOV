@@ -195,7 +195,7 @@ Frontend, нижняя панель и сравнение: amCharts 5 (RSI, MACD
 - Коммиты: Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`, `perf:`, `style:`)
 - Версии: SemVer (`VERSION`, `CHANGELOG.md`, тег `vX.Y.Z`)
 - PHP: без фреймворка, PDO. `declare(strict_types=1)` — добавить в новые файлы
-- JS: без сборки, ES2020+, глобальные `LightweightCharts` и `am5`
+- JS: без сборки, ES2020+, глобальные `am5` (amCharts 5)
 - CSS: переменные `--bg-card`, `--text`, `--border` для тем; тема переключается через `[data-theme="light"]` на `html` (см. `theme.js`)
 - Шрифт: Inter Variable (локальный), fallback на `-apple-system`, `BlinkMacSystemFont`, `Segoe UI`, `Roboto`, `Helvetica`, `Arial`
 
