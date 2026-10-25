@@ -92,3 +92,16 @@ cat << 'EOF' > /var/www/sotis.org/data/www/forecast.sotis.org/PROJECT_HISTORY.md
 3. `git push origin main`.
 4. Тег: `git tag -a vX.Y.Z -m "..."` → `git push origin main --tags`.
 5. GitHub Release (Title + описание из CHANGELOG).
+
+---
+
+## Скрипты развертывания и диагностики
+
+В проекте есть два универсальных bash-скрипта, которые работают на любом сервере:
+
+| Скрипт | Назначение | Как запустить |
+|---|---|---|
+| **restore_stockforecast.sh** | Восстановление проекта с нуля (код, права, Cron, кэши) | \`sudo bash <(curl -s https://raw.githubusercontent.com/CAPITALOV/StockForecast-by-KAPITALOV/main/scripts/deploy/restore_stockforecast.sh)\` |
+| **check_health.sh** | Проверка «здоровья» сайта (файлы, БД, кэши, Cron, HTTP) | \`sudo bash <(curl -s https://raw.githubusercontent.com/CAPITALOV/StockForecast-by-KAPITALOV/main/scripts/deploy/check_health.sh)\` |
+
+Подробная инструкция: [scripts/deploy/README.md](scripts/deploy/README.md)
