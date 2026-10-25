@@ -1,13 +1,33 @@
 #!/usr/bin/env bash
 # ============================================================
 # Универсальный скрипт проверки «здоровья» StockForecast
-# Сам определяет пути, пользователя, IP и PHP.
-# Запуск: sudo bash scripts/deploy/check_health.sh
+# Запуск: sudo bash check_health.sh (из любой папки)
 # ============================================================
 
-# Автоопределение PROJECT_DIR (директория, где лежит скрипт, на 2 уровня вверх)
+# Умное автоопределение корня проекта:
+find_project_dir() {
+    local dir="$1"
+    while [[ "$dir" != "/" ]]; do
+        if [[ -f "$dir/index.php" && -f "$dir/lib/synthetic.php" ]]; then
+            echo "$dir"
+            return 0
+        fi
+        dir="$(dirname "$dir")"
+    done
+    return 1
+}
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+PROJECT_DIR=""
+PROJECT_DIR=$(find_project_dir "$SCRIPT_DIR") || true
+if [[ -z "$PROJECT_DIR" ]]; then
+    PROJECT_DIR=$(find_project_dir "$PWD") || true
+fi
+if [[ -z "$PROJECT_DIR" ]]; then
+    echo "❌ Не удалось найти корень проекта (нет index.php или lib/synthetic.php)."
+    echo "   Запустите скрипт из корня сайта или из scripts/deploy/."
+    exit 1
+fi
 
 # Автоопределение владельца проекта
 SITE_USER=$(stat -c '%U' "$PROJECT_DIR")
@@ -17,7 +37,7 @@ SITE_GROUP=$(stat -c '%G' "$PROJECT_DIR")
 SERVER_IP=$(hostname -I | awk '{print $1}')
 SITE_DOMAIN="sotis.org"
 
-# Автоопределение PHP (ищем в типичных местах)
+# Автоопределение PHP
 PHP_BIN=""
 for p in "/opt/php84/bin/lsphp" "/opt/php83/bin/lsphp" "/usr/local/lsws/lsphp84/bin/lsphp" "/usr/local/bin/php" "/usr/bin/php"; do
     if [[ -x "$p" ]]; then
@@ -27,7 +47,7 @@ for p in "/opt/php84/bin/lsphp" "/opt/php83/bin/lsphp" "/usr/local/lsws/lsphp84/
 done
 [[ -z "$PHP_BIN" ]] && PHP_BIN="php"
 
-# Настройки БД (можно переопределить через env)
+# Настройки БД
 DB_NAME="${DB_NAME:-stockforecast}"
 DB_USER="${DB_USER:-sf_user}"
 DB_PASS="${DB_PASS:-MyStrongPass123!}"
@@ -101,7 +121,7 @@ if [[ -d "$PROJECT_DIR/.git" ]]; then
         ok "Версия соответствует GitHub"
     fi
 else
-    warn "Папка .git отсутствует (развернуто не через git)"
+    info "Папка .git отсутствует (развернуто через панель, это норма для тестового сервера)"
 fi
 
 # ─── 4. База данных ───
@@ -168,7 +188,6 @@ fi
 
 # ─── 8. HTTP-проверка сайта ───
 head_section "8. HTTP-проверка сайта"
-# Пробуем с Host-заголовком, если IP есть, иначе через localhost
 if [[ -n "$SERVER_IP" ]]; then
     HTTP_CODE=$(curl -k -s -o /dev/null -w "%{http_code}" -H "Host: $SITE_DOMAIN" "https://$SERVER_IP/index.php" 2>/dev/null || echo "000")
 else
@@ -200,13 +219,4 @@ done
 # ─── Итог ───
 echo ""
 echo "═══════════════════════════════════════════════════════════"
-if [[ "$ERRORS" -eq 0 && "$WARNINGS" -eq 0 ]]; then
-    echo -e "${C_OK}  ✅ ВСЁ ИДЕАЛЬНО! Ошибок: 0, предупреждений: 0${C_RST}"
-elif [[ "$ERRORS" -eq 0 ]]; then
-    echo -e "${C_WARN}  ⚠️  Есть предупреждения: $WARNINGS. Ошибок: 0${C_RST}"
-else
-    echo -e "${C_ERR}  ❌ Ошибок: $ERRORS. Предупреждений: $WARNINGS${C_RST}"
-fi
-echo "═══════════════════════════════════════════════════════════"
-echo ""
-exit $(( ERRORS > 0 ? 1 : 0 ))
+if [[ "$ERRORS" -eq 0 && "$W
