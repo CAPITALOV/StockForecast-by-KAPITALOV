@@ -26,3 +26,11 @@
    0 * * * * /usr/bin/php /path/to/project/scripts/cron/refresh_screener.php
    # Обновление кэша Точности (каждый час)
    0 * * * * /usr/bin/php /path/to/project/scripts/cron/refresh_accuracy.php
+⚠️ Известные «подводные камни» (Troubleshooting v2.2.0):
+Ошибка Unknown column 'signal': В таблице synthetic_components колонка называется trade_action (слово signal зарезервировано в MySQL).
+
+Ошибка Unknown column 'hb.date': В таблице history_bars колонка с датой называется ts. Используйте hb.ts в SQL.
+
+Ошибка Illegal mix of collations: Убедитесь, что все таблицы имеют кодировку utf8mb4_unicode_ci.
+
+Код не обновляется: После правки PHP-файлов может потребоваться сброс OPcache: sudo systemctl restart php*-fpm.
