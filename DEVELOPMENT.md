@@ -48,7 +48,7 @@ API-запросы (`?r=api-*`) обрабатываются в `index.php` и �
 
 ### Стек
 
-Backend: PHP 7.4+ (без фреймворка), PDO/MySQL 5.7+ / MariaDB 10.3+.
+Backend: **PHP 8.4+** (рекомендуется 8.4 или 8.5), без фреймворка, PDO/MySQL **8.0+**.
 Расширения PHP: `pdo_mysql`, `mbstring`, `curl`, `fileinfo`.
 
 Frontend, основной график: amCharts 5 Stock Chart (`index.js`, `xy.js`, `stock.js`, `plugins/exporting.js`, темы `Animated` + `Dark`) — CDN `cdn.amcharts.com`.
@@ -62,6 +62,8 @@ Frontend, нижняя панель и сравнение: amCharts 5 (RSI, MACD
 Графики: свечи/линии (amCharts), RSI(14), MACD, Bollinger, SMA/EMA, прогнозные линии; сглаживание `tension: 0.8`; рендер SVG/canvas.
 
 Экспорт: CSV (server-side), PNG (amCharts `am5plugins_exporting`).
+
+**Важно (v2.2.0):** Для предотвращения 504 Timeout страницы Скринера и Точности переведены на чтение JSON-кэшей (`data/screener_cache.json`, `data/accuracy_cache.json`). Кэши генерируются скриптами `scripts/cron/refresh_screener.php` и `scripts/cron/refresh_accuracy.php` (запускаются через Cron). Прямые тяжелые SQL-запросы на этих страницах больше не выполняются.
 
 ## 2. API-эндпоинты
 
