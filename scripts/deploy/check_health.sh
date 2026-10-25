@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================
-# Универсальный скрипт проверки «здоровья» StockForecast
+# Универсальный скрипт проверки «здоровья» StockForecast (с цветами)
 # Запуск: sudo bash check_health.sh (из любой папки)
 # ============================================================
 
@@ -47,11 +47,18 @@ DB_PASS="${DB_PASS:-MyStrongPass123!}"
 
 ERRORS=0; WARNINGS=0
 
-ok()   { echo "  [OK]   $1"; }
-warn() { echo "  [WARN] $1"; WARNINGS=$((WARNINGS+1)); }
-err()  { echo "  [ERR]  $1"; ERRORS=$((ERRORS+1)); }
-info() { echo "  [INFO] $1"; }
-head_section() { echo ""; echo "── $1 ──"; }
+# ANSI-цвета
+C_OK="\033[32m"
+C_WARN="\033[33m"
+C_ERR="\033[31m"
+C_INFO="\033[36m"
+C_RST="\033[0m"
+
+ok()   { echo -e "  ${C_OK}[OK]${C_RST}   $1"; }
+warn() { echo -e "  ${C_WARN}[WARN]${C_RST} $1"; WARNINGS=$((WARNINGS+1)); }
+err()  { echo -e "  ${C_ERR}[ERR]${C_RST}  $1"; ERRORS=$((ERRORS+1)); }
+info() { echo -e "  ${C_INFO}[INFO]${C_RST} $1"; }
+head_section() { echo ""; echo -e "${C_INFO}── $1 ──${C_RST}"; }
 
 echo "==========================================================="
 echo "  Проверка здоровья StockForecast (универсальная)"
@@ -168,9 +175,9 @@ fi
 
 head_section "8. HTTP-проверка сайта"
 if [[ -n "$SERVER_IP" ]]; then
-    HTTP_CODE=$(curl -k -s -o /dev/null -w "%{http_code}" -H "Host: $SITE_DOMAIN" "https://$SERVER_IP/index.php" 2>/dev/null || echo "000")
+    HTTP_CODE=$(curl -k -s -o /dev/null -w "%{http_code}" --max-time 10 -H "Host: $SITE_DOMAIN" "https://$SERVER_IP/index.php" 2>/dev/null); [[ -z "$HTTP_CODE" ]] && HTTP_CODE="000"
 else
-    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost/index.php" 2>/dev/null || echo "000")
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "http://localhost/index.php" 2>/dev/null); [[ -z "$HTTP_CODE" ]] && HTTP_CODE="000"
 fi
 if [[ "$HTTP_CODE" == "200" ]]; then ok "Главная страница: HTTP $HTTP_CODE"; elif [[ "$HTTP_CODE" == "000" ]]; then err "Главная страница: не отвечает"; else warn "Главная страница: HTTP $HTTP_CODE"; fi
 
@@ -186,11 +193,11 @@ done
 echo ""
 echo "==========================================================="
 if [[ "$ERRORS" -eq 0 && "$WARNINGS" -eq 0 ]]; then
-    echo "  [OK] ВСЕ ИДЕАЛЬНО! Ошибок: 0, предупреждений: 0"
+    echo -e "  ${C_OK}ВСЕ ИДЕАЛЬНО! Ошибок: 0, предупреждений: 0${C_RST}"
 elif [[ "$ERRORS" -eq 0 ]]; then
-    echo "  [WARN] Есть предупреждения: $WARNINGS. Ошибок: 0"
+    echo -e "  ${C_WARN}Есть предупреждения: $WARNINGS. Ошибок: 0${C_RST}"
 else
-    echo "  [ERR] Ошибок: $ERRORS. Предупреждений: $WARNINGS"
+    echo -e "  ${C_ERR}Ошибок: $ERRORS. Предупреждений: $WARNINGS${C_RST}"
 fi
 echo "==========================================================="
 echo ""
